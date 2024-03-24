@@ -1,6 +1,6 @@
 import bpy
 
-def Rename():
+def rename():
     # Active Object Cache
     active_object = bpy.context.view_layer.objects.active
     name = active_object.name
@@ -27,10 +27,14 @@ def Rename():
                 obj.name = obj.name.strip("_high")
                 obj.name = name.strip("_low") + "_high"
             else:
-                obj.name = name.strip("_low") + "_high"                  
+                obj.name = name.strip("_low") + "_high"
+
+def swap_num_separator(objects_to_rename, separator):
+    for obj in objects_to_rename:
+        obj.name = obj.name.replace(".", separator)
             
 
-def SetWireActive():
+def set_wire_mode():
     activeObject = bpy.context.view_layer.objects.active
     activeObject.display_type = 'WIRE'
 
@@ -46,5 +50,5 @@ def ExtendSelectionToHigh():
         del splited_name_high[-1]
 
         if splited_name == splited_name_high:
-            print(o.name)
+            # print(o.name)
             o.select_set(True)

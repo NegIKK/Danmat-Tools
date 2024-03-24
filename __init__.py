@@ -14,6 +14,32 @@ import bpy
 
 # from . import collection_ops
 from . import bool
+from . import rename
+
+from bpy.props import (StringProperty,
+                       BoolProperty,
+                       IntProperty,
+                       FloatProperty,
+                       FloatVectorProperty,
+                       EnumProperty,
+                       PointerProperty,
+                       )
+
+# -----------------------
+# PROPERTY GROUP
+# -----------------------
+class MY_PG_SceneProperties(bpy.types.PropertyGroup):
+    use_alt_separator: BoolProperty(
+        name= "Alternative Separator",
+        description="Using '_' instead of '.'",
+        default= False
+        )
+
+# -----------------------
+# OPERATORS
+# -----------------------
+
+# BOOL
 
 class bool_hide(bpy.types.Operator):
     """Tooltip"""
@@ -53,7 +79,44 @@ class bool_set_children(bpy.types.Operator):
         bool.hide(obj)
 
         return {'FINISHED'}
+
+
+# RENAME
     
+class rename_simple(bpy.types.Operator):
+    """Set suffixes. Active object - Lowpoly, Other Selected objects - Highpoly
+    SHIFT - isolate renamed objects to inspect"""
+    bl_label = "Rename"
+    bl_idname = "object.rename_simple"
+   
+    def invoke(self, context, event):
+        
+        rename.rename()
+        if getattr(bpy.context.scene.my_tool, 'use_alt_separator') == True:
+            rename.swap_num_separator(bpy.context.selected_objects, "_")
+
+        if event.shift:
+            rename.set_wire_mode()
+            bpy.ops.view3d.localview()
+
+        return {'FINISHED'}
+    
+class extend_selection(bpy.types.Operator):
+    """Select all objects in bake group
+    SHIFT - isolate objects to inspect"""
+    bl_label = "Select Bake Group"
+    bl_idname = "object.extend_selection"
+   
+    def invoke(self, context, event):
+        
+        rename.ExtendSelectionToHigh()
+
+        if event.shift:
+            bpy.ops.view3d.localview()
+
+        return {'FINISHED'}    
+    
+
 # class backup_obj(bpy.types.Operator):
 #     """Tooltip"""
 #     bl_label = "Backup"
@@ -64,25 +127,19 @@ class bool_set_children(bpy.types.Operator):
         
 
 #         return {'FINISHED'}
+    
 
+# -----------------------
 # PANEL
+# -----------------------
+    
 
 class Danmat_Panel:
-    # bl_label = "Danmat Tools"
-    # bl_idname = "Panel_PT_DanmatTools"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'DAN'
     # bl_options = {"DEFAULT_CLOSED"}
-
-    # # Отрисовка интерфейса панели
-    # def draw(self, context):
-    #     layout = self.layout
         
-        
-
-        
-
 class main_panel(Danmat_Panel, bpy.types.Panel):
     bl_idname = "Danmat"
     bl_label = "Danmat Tools"
@@ -91,11 +148,11 @@ class main_panel(Danmat_Panel, bpy.types.Panel):
         layout = self.layout
         
         # DEBUG
-        row = layout.row()
-        row.label(text= "DEBUG")
+        # row = layout.row()
+        # row.label(text= "DEBUG")
 
-        row = layout.row(align=True)
-        row.operator("object.bool_hide")
+        # row = layout.row(align=True)
+        # row.operator("object.bool_hide")
         
         # MAIN
         # row = layout.row()
@@ -107,16 +164,15 @@ class main_panel(Danmat_Panel, bpy.types.Panel):
         # col.operator("otp.renamer_sort_collections")
 
         # 
-        row = layout.row()
-        row.label(text= "Remesh Controller")
+        # row = layout.row()
+        # row.label(text= "Remesh Controller")
         
-        col = layout.column(align=True)
-        row = col.row(align=True)
-        row.operator("otp.remesh_enable")
-        row.operator("otp.remesh_disable")
-        col.operator("otp.remesh_remove")
-
-        
+        # col = layout.column(align=True)
+        # row = col.row(align=True)
+        # row.operator("otp.remesh_enable")
+        # row.operator("otp.remesh_disable")
+        # col.operator("otp.remesh_remove")
+       
 
 class bool_panel(Danmat_Panel, bpy.types.Panel):
     bl_parent_id = "Danmat"
@@ -141,14 +197,22 @@ class naming_panel(Danmat_Panel, bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        scene = context.scene
+        mytool = scene.my_tool
+
 
         row = layout.row(align=True)
-        row.operator("object.get_coll_name")
-        row.operator("otp.renamer_rename_isolate")
+        row.operator("object.rename_simple")
+        row.operator("object.rename_isolate")
+        
+        row = layout.row(align=True)
+        row.prop(mytool, "use_alt_separator")
+        # row.operator("otp.renamer_rename_isolate")
 
         row = layout.row(align=True)
-        row.operator("otp.renamer_extend_selection")
-        row.operator("otp.renamer_extend_selection_isolate")
+        row.operator("object.extend_selection")
+        # row.operator("otp.renamer_extend_selection_isolate")
+
 
 # Регистрация для того, чтоб отображалось в интерфейсе, иначе не запашет
 
@@ -157,8 +221,9 @@ classes_to_register = (
     main_panel,
     bool_panel,
     naming_panel,
-    # Renamer_Rename,
-    # Renamer_Rename_Isolate,
+    rename_simple,
+    extend_selection,
+    # rename_isolate,
     # Renamer_Extend_Selection,
     # Renamer_Extend_Selection_Isolate,
     # Renamer_Sort_Collections,
@@ -167,13 +232,16 @@ classes_to_register = (
     # Remesh_Remove,
     bool_hide,
     bool_show,
-    bool_set_children
+    bool_set_children,
     # get_coll_name
+    MY_PG_SceneProperties
     )
 
 def register():
     for cls in classes_to_register:
-        bpy.utils.register_class(cls) 
+        bpy.utils.register_class(cls)
+
+    bpy.types.Scene.my_tool = PointerProperty(type=MY_PG_SceneProperties)
 
 def unregister():
     for cls in classes_to_register:
