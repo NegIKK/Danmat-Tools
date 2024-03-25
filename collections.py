@@ -1,6 +1,6 @@
 import bpy
 
-last_helper_collection_name = ""
+# last_helper_collection_name = ""
 
 def Get_Scene_Collections():
     collections_list = ["Scene Collection"]
@@ -61,6 +61,9 @@ def Move_To_Collection(objects_to_move, target_collection):
         bpy.data.collections[target_collection].objects.link(obj)
 
     # print(current_obj_collection_name)
+
+
+# def set_collection_color(collection_name, color):
 
 
 # Add_Helper_Collection("BOOLS")

@@ -12,13 +12,13 @@ def get_bool_objects(obj):
 
 def hide(obj):
     for ob in get_bool_objects(obj):
-        ob.hide_viewport = True
+        # ob.hide_viewport = True
         ob.hide_set(1)
 
 
 def show (obj):
     for ob in get_bool_objects(obj):
-        ob.hide_viewport = False
+        # ob.hide_viewport = False
         ob.hide_set(0)
 
 

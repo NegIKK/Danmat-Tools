@@ -15,6 +15,7 @@ import bpy
 # from . import collection_ops
 from . import bool
 from . import rename
+from . import remesh
 
 from bpy.props import (StringProperty,
                        BoolProperty,
@@ -80,6 +81,31 @@ class bool_set_children(bpy.types.Operator):
 
         return {'FINISHED'}
 
+# REMESH
+    
+class remesh_enable(bpy.types.Operator):
+    """"""
+    bl_label = "Enable Remesh"
+    bl_idname = "object.remesh_enable"
+   
+    def execute(self, context):
+        
+        for obj in bpy.context.selected_objects:
+            remesh.enable(obj, "NODES", "SDF")
+
+        return {'FINISHED'}
+    
+class remesh_disable(bpy.types.Operator):
+    """"""
+    bl_label = "Disable Remesh"
+    bl_idname = "object.remesh_disable"
+   
+    def execute(self, context):
+        
+        for obj in bpy.context.selected_objects:
+            remesh.disable(obj, "NODES", "SDF")
+
+        return {'FINISHED'}
 
 # RENAME
     
@@ -191,6 +217,19 @@ class bool_panel(Danmat_Panel, bpy.types.Panel):
         row.operator("object.bool_show")
         col.operator("object.bool_set_children")
 
+class remesh_panel(Danmat_Panel, bpy.types.Panel):
+    bl_parent_id = "Danmat"
+    bl_label = "Remesh"
+
+    def draw(self, context):
+        layout = self.layout
+
+        row = layout.row(align=True)
+        row.operator("object.remesh_enable")
+        row.operator("object.remesh_disable")
+
+
+
 class naming_panel(Danmat_Panel, bpy.types.Panel):
     bl_parent_id = "Danmat"
     bl_label = "Naming"
@@ -200,40 +239,35 @@ class naming_panel(Danmat_Panel, bpy.types.Panel):
         scene = context.scene
         mytool = scene.my_tool
 
-
         row = layout.row(align=True)
         row.operator("object.rename_simple")
         row.operator("object.rename_isolate")
         
         row = layout.row(align=True)
         row.prop(mytool, "use_alt_separator")
-        # row.operator("otp.renamer_rename_isolate")
 
         row = layout.row(align=True)
         row.operator("object.extend_selection")
-        # row.operator("otp.renamer_extend_selection_isolate")
 
 
 # Регистрация для того, чтоб отображалось в интерфейсе, иначе не запашет
 
 classes_to_register = (
-    # Danmat_Panel, 
     main_panel,
     bool_panel,
+    remesh_panel,
     naming_panel,
-    rename_simple,
-    extend_selection,
-    # rename_isolate,
-    # Renamer_Extend_Selection,
-    # Renamer_Extend_Selection_Isolate,
-    # Renamer_Sort_Collections,
-    # Remesh_Enable,
-    # Remesh_Disable,
-    # Remesh_Remove,
+
     bool_hide,
     bool_show,
     bool_set_children,
-    # get_coll_name
+
+    remesh_enable,
+    remesh_disable,
+
+    rename_simple,
+    extend_selection,
+
     MY_PG_SceneProperties
     )
 
