@@ -16,6 +16,7 @@ import bpy
 from . import bool
 from . import rename
 from . import remesh
+from . import _devtools
 
 from bpy.props import (StringProperty,
                        BoolProperty,
@@ -142,6 +143,18 @@ class extend_selection(bpy.types.Operator):
 
         return {'FINISHED'}    
     
+# DEV
+    
+class flip_screw(bpy.types.Operator):
+    """"""
+    bl_label = "flip_screw"
+    bl_idname = "object.flip_screw"
+   
+    def execute(self, context):
+        
+        _devtools.flip_srew_normals()
+
+        return {'FINISHED'}
 
 # class backup_obj(bpy.types.Operator):
 #     """Tooltip"""
@@ -174,30 +187,11 @@ class main_panel(Danmat_Panel, bpy.types.Panel):
         layout = self.layout
         
         # DEBUG
-        # row = layout.row()
-        # row.label(text= "DEBUG")
+        row = layout.row()
+        row.label(text= "DEBUG")
 
-        # row = layout.row(align=True)
-        # row.operator("object.bool_hide")
-        
-        # MAIN
-        # row = layout.row()
-        # row.label(text= "Bake Assistant")
-
-        
-
-        # col = layout.column(align=True)
-        # col.operator("otp.renamer_sort_collections")
-
-        # 
-        # row = layout.row()
-        # row.label(text= "Remesh Controller")
-        
-        # col = layout.column(align=True)
-        # row = col.row(align=True)
-        # row.operator("otp.remesh_enable")
-        # row.operator("otp.remesh_disable")
-        # col.operator("otp.remesh_remove")
+        row = layout.row(align=True)
+        row.operator("object.flip_screw")
        
 
 class bool_panel(Danmat_Panel, bpy.types.Panel):
@@ -253,6 +247,8 @@ class naming_panel(Danmat_Panel, bpy.types.Panel):
 # Регистрация для того, чтоб отображалось в интерфейсе, иначе не запашет
 
 classes_to_register = (
+    flip_screw,
+    
     main_panel,
     bool_panel,
     remesh_panel,

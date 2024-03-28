@@ -2,7 +2,6 @@ import bpy
 
 # def get_modifier(obj, ):
 
-
 def disable(obj, modifier_type, modifier_name):   
     for modifier in obj.modifiers:
         if modifier.type == modifier_type:
