@@ -14,3 +14,13 @@ def flip_srew_normals():
             else:
                 mod.use_normal_flip = True
                 screw_flipped = not screw_flipped
+
+# def move_modifier(obj, modifire_name):
+#     for modifier in obj.modifiers:
+#         if modifier.name == modifire_name:
+#             # modifier.
+
+            
+
+# if modifier.type == "BOOLEAN":
+    # obj.modifiers[modifire_name]

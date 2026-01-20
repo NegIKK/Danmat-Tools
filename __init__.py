@@ -47,11 +47,13 @@ class bool_hide(bpy.types.Operator):
     """Tooltip"""
     bl_label = "Hide Bools"
     bl_idname = "object.bool_hide"
+    bl_options = {'UNDO'}
    
     def execute(self, context):
 
         for obj in bpy.context.selected_objects:
-            bool.hide(obj)
+            # bool.hide(obj)
+            bool.hide_utility_objects(obj)
 
         return {'FINISHED'}
     
@@ -59,11 +61,13 @@ class bool_show(bpy.types.Operator):
     """Tooltip"""
     bl_label = "Show Bools"
     bl_idname = "object.bool_show"
+    bl_options = {'UNDO'}
    
     def execute(self, context):
         
         for obj in bpy.context.selected_objects:
-            bool.show(obj)
+            # bool.show(obj)
+            bool.show_utility_objects(obj)
 
         return {'FINISHED'}
     
@@ -71,14 +75,27 @@ class bool_set_children(bpy.types.Operator):
     """Делает бъекты булевых операций дочерними главному, отправляет в отдельную коллекцию и скрывает"""
     bl_label = "Contain and Hide"
     bl_idname = "object.bool_set_children"
+    bl_options = {'UNDO'}
    
     def execute(self, context):
         
         obj = bpy.context.object
         bool.show(obj)
-        bool.to_collection(obj)
+        # bool.to_collection(obj)
         bool.set_children(obj)
         bool.hide(obj)
+
+        return {'FINISHED'}
+    
+class SelectUnusedUnility(bpy.types.Operator):
+    """Делает бъекты булевых операций дочерними главному, отправляет в отдельную коллекцию и скрывает"""
+    bl_label = "Select Unused Utility"
+    bl_idname = "object.select_unused_utility"
+    bl_options = {'UNDO'}
+   
+    def execute(self, context):
+        
+        bool.select_unused_children_utility()
 
         return {'FINISHED'}
 
@@ -88,6 +105,7 @@ class remesh_enable(bpy.types.Operator):
     """"""
     bl_label = "Enable Remesh"
     bl_idname = "object.remesh_enable"
+    bl_options = {'UNDO'}
    
     def execute(self, context):
         
@@ -100,6 +118,7 @@ class remesh_disable(bpy.types.Operator):
     """"""
     bl_label = "Disable Remesh"
     bl_idname = "object.remesh_disable"
+    bl_options = {'UNDO'}
    
     def execute(self, context):
         
@@ -115,6 +134,7 @@ class rename_simple(bpy.types.Operator):
     SHIFT - isolate renamed objects to inspect"""
     bl_label = "Rename"
     bl_idname = "object.rename_simple"
+    bl_options = {'UNDO'}
    
     def invoke(self, context, event):
         
@@ -133,6 +153,7 @@ class extend_selection(bpy.types.Operator):
     SHIFT - isolate objects to inspect"""
     bl_label = "Select Bake Group"
     bl_idname = "object.extend_selection"
+    bl_options = {'UNDO'}
    
     def invoke(self, context, event):
         
@@ -149,6 +170,7 @@ class flip_screw(bpy.types.Operator):
     """"""
     bl_label = "flip_screw"
     bl_idname = "object.flip_screw"
+    bl_options = {'UNDO'}
    
     def execute(self, context):
         
@@ -210,6 +232,7 @@ class bool_panel(Danmat_Panel, bpy.types.Panel):
         row.operator("object.bool_hide")
         row.operator("object.bool_show")
         col.operator("object.bool_set_children")
+        col.operator("object.select_unused_utility")
 
 class remesh_panel(Danmat_Panel, bpy.types.Panel):
     bl_parent_id = "Danmat"
@@ -257,6 +280,7 @@ classes_to_register = (
     bool_hide,
     bool_show,
     bool_set_children,
+    SelectUnusedUnility,
 
     remesh_enable,
     remesh_disable,

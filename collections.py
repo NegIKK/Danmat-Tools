@@ -62,16 +62,3 @@ def Move_To_Collection(objects_to_move, target_collection):
 
     # print(current_obj_collection_name)
 
-
-# def set_collection_color(collection_name, color):
-
-
-# Add_Helper_Collection("BOOLS")
-# print(Get_Collection_Name_Of_Object(bpy.context.object))
-# print(Get_Scene_Collections())
-# Move_To_Collection(bpy.context.selected_objects, Add_Helper_Collection("BOOL"))
-
-
-
-# Get_Current_Collections()
-
