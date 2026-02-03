@@ -74,7 +74,7 @@ class VIEW3D_PT_Bool(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         row.operator(operators.OBJECT_OT_BoolHide.bl_idname)
         row.operator(operators.OBJECT_OT_BoolShow.bl_idname)
         col.operator(operators.OBJECT_OT_BoolSetChildren.bl_idname)
-        col.operator(operators.OBJECT_OT_SelectUnusedUnility.bl_idname)
+        col.operator(operators.OBJECT_OT_SelectUnusedUtility.bl_idname)
 
 
 # class VIEW3D_PT_Remesh(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
@@ -107,13 +107,32 @@ class VIEW3D_PT_Naming(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         row = col.row(align=True)
         row.prop(scene.danmat_tools_props, "use_alt_separator")
 
+class VIEW3D_PT_Testing(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
+    bl_parent_id = "VIEW3D_PT_Main"
+    bl_label = "Testing"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        col = layout.column(align=True)
+        row = col.row(align=True)
+        col.operator(operators.VIEW3D_OT_overlay_example.bl_idname)
+        # col.separator()
+        col.operator(operators.VIEW3D_OT_overlay_select_object.bl_idname)
+        col.separator()
+        col.operator(operators.VIEW3D_OT_overlay_select_utils.bl_idname)
+        col.operator(operators.OBJECT_OT_GetModifiersObjects.bl_idname)
+
+
 
 classes_to_register = [
     # VIEW3D_PT_DanmatPanel,
     VIEW3D_PT_Main,
     VIEW3D_PT_Bool,
     # PT_Remesh,
-    VIEW3D_PT_Naming
+    VIEW3D_PT_Naming,
+    VIEW3D_PT_Testing
 ]
 
 def register():

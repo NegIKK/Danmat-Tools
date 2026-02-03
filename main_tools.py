@@ -89,7 +89,7 @@ def create_helper_collection(suffix):
     colletction_of_selected_obj = get_collection_name_of_object(bpy.context.object)
     # print(colletction_of_selected_obj)
 
-    collection_name_to_create = colletction_of_selected_obj + "_" + suffix
+    collection_name_to_create = colletction_of_selected_obj + " " + suffix
 
     all_scene_collections = get_scene_collections()
     
@@ -119,13 +119,6 @@ def move_to_collection(objects_to_move, target_collection):
 #endregion Collections
 
 #region Bool and Objects
-def get_bool_objects(obj):
-    obj_names = []
-    for modifier in obj.modifiers:
-        if modifier.type == "BOOLEAN":
-            obj_names.insert(-1,modifier.object)
-    return(obj_names)
-
 
 def show_utility_objects(obj):
     if not obj.children:
@@ -133,87 +126,96 @@ def show_utility_objects(obj):
     
     if obj.hide_get():
         obj.hide_set(False)
+
+    utils = []
     
     for child in obj.children:
-        
-        if child.display_type in {'BOUNDS', 'WIRE'}:           
-            child.hide_set(0)
+        if child.display_type in {'BOUNDS', 'WIRE'}:
+            utils.extend([child])
+            
+    for mod_obj in get_modifier_objects(obj):
+        utils.extend([mod_obj])
+
+    for u in utils:        
+        u.hide_set(0)
        
 
 def hide_utility_objects(obj):
     if not obj.children:
         return
 
+    utils = []
+    
     for child in obj.children:
-
         if child.display_type in {'BOUNDS', 'WIRE'}:
-            hide_utility_objects(child)
-            child.hide_set(1)
-            # print("hide")
+            utils.extend([child])
+            
+    for mod_obj in get_modifier_objects(obj):
+        utils.extend([mod_obj])
+
+    for u in utils:        
+        u.hide_set(1)
 
 
-def set_children(obj):
-    for ob in get_bool_objects(obj):
+def get_unparented_utility(obj):
+    mod_objects = set(get_modifier_objects(obj))
+    children = set(obj.children)
+    unused = mod_objects - children  # объекты из модификаторов, которые не являются дочерними
+
+    return unused
+
+
+def set_utility_as_child(obj):
+    for ob in get_unparented_utility(obj):
         ob.select_set(True)     # Выделить объекты
     
     bpy.ops.object.parent_set(keep_transform=True)
 
 
 def to_collection(obj):
-    create_helper_collection("BOOL")
-    objs_to_move = get_bool_objects(obj)
-    move_to_collection(objs_to_move, create_helper_collection("BOOL"))
+    create_helper_collection("Utils")
+    objs_to_move = get_modifier_objects(obj)
+    move_to_collection(objs_to_move, create_helper_collection("Utils"))
 
 
 
-# --- Вспомогательная рекурсивная функция ---
-def collect_all_children(obj, out):
-    for child in obj.children:
-        out.add(child)
-        collect_all_children(child, out)
-
-
-# --- Определение детей, участвующих в модификаторах ---
-def get_children_used_in_modifiers(active_obj, children):
-    used = set()
-
-    for mod in active_obj.modifiers:
+def get_modifier_objects(obj):
+    """Возвращает set всех объектов, участвующих в модификаторах объекта obj, включая Geometry Nodes."""
+    result = set()
+    for mod in obj.modifiers:
+        # 1. Стандартные POINTER-ссылки
         for prop in mod.bl_rna.properties:
             if prop.type == 'POINTER' and prop.fixed_type == bpy.types.Object:
                 linked_obj = getattr(mod, prop.identifier, None)
-                if linked_obj in children:
-                    used.add(linked_obj)
+                if linked_obj is not None:
+                    result.add(linked_obj)
+        
+        # 2. Geometry Nodes: ищем объекты среди пользовательских свойств
+        if mod.type == 'NODES':
+            for key, value in mod.items():
+                if isinstance(value, bpy.types.Object):
+                    result.add(value)
+                # Если value — коллекция объектов, добавить их тоже
+                if isinstance(value, (list, tuple)):
+                    for v in value:
+                        if isinstance(v, bpy.types.Object):
+                            result.add(v)
+        
+        if mod.type == 'BOOLEAN' and mod.object:
+            result.add(mod.object)
 
-    return used
+    return result
 
 
-# --- Главная функция: выделить НЕ участвующих ---
-def select_unused_children_utility():
-    active = bpy.context.active_object
-    if not active:
-        return
-
-    # 1. Собираем всех детей
-    children = set()
-    collect_all_children(active, children)
-
-    if not children:
-        return
-
-    # 2. Определяем, какие используются
-    used = get_children_used_in_modifiers(active, children)
-
-    # 3. Неиспользуемые = все дети - используемые
-    unused = children - used
-
-    # 4. Выделяем
+def select_object_by_index(self, context, index):
     bpy.ops.object.select_all(action='DESELECT')
-    for obj in unused:
+    if not self._items:
+        return
+    
+    obj = self._items[index]
+    if isinstance(obj, bpy.types.Object):
         obj.select_set(True)
-
-    # активный остаётся активным
-    active.select_set(True)
-    bpy.context.view_layer.objects.active = active
+        context.view_layer.objects.active = obj
 
 
 #region Remesh

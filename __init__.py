@@ -32,3 +32,4 @@ def unregister(): # Выгружается все в обратном поряд
 
 if __name__ == "__main__":
     register()
+    
