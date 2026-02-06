@@ -108,7 +108,7 @@ class VIEW3D_PT_Testing(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
 
         col = layout.column(align=True)
         row = col.row(align=True)
-        col.operator(operators.VIEW3D_OT_overlay_example.bl_idname)
+        # col.operator(operators.VIEW3D_OT_overlay_example.bl_idname)
         # col.separator()
         # col.operator(operators.VIEW3D_OT_overlay_select_object.bl_idname)
         col.separator()
@@ -140,7 +140,7 @@ classes_to_register = [
     # VIEW3D_PT_Bool,
     # PT_Remesh,
     VIEW3D_PT_Naming,
-    VIEW3D_PT_Testing,
+    # VIEW3D_PT_Testing,
     VIEW3D_MT_MainPieMenu
 ]
 
