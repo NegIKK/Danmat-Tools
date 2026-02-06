@@ -107,18 +107,20 @@ def draw():
     y = base_y + DESCRIPTION_OFFSET + LINE_HEIGHT * (len(_state["description"]) + 1)
     
     if _state["header"]:
-        blf.color(font_id, *COLOR_HEADER)
-        blf.position(font_id, base_x, y, 0)
-        blf.draw(font_id, str(_state["header"]))
+        # blf.color(font_id, *COLOR_HEADER)
+        # blf.position(font_id, base_x, y, 0)
+        # blf.draw(font_id, str(_state["header"]))
+        draw_text_with_outline(font_id, str(_state["header"]), base_x, y, COLOR_HEADER)
         y -= LINE_HEIGHT
 
     # --- Description ---
     blf.size(font_id, FONT_SIZE_DESCRIPTION)
 
     for description in _state["description"]:
-        blf.color(font_id, *COLOR_TEXT)
-        blf.position(font_id, base_x, y, 0)
-        blf.draw(font_id, str(description))
+        # blf.color(font_id, *COLOR_TEXT)
+        # blf.position(font_id, base_x, y, 0)
+        # blf.draw(font_id, str(description))
+        draw_text_with_outline(font_id, str(description), base_x, y, COLOR_TEXT)
         y -= LINE_HEIGHT
 
     # Lines
@@ -126,15 +128,22 @@ def draw():
 
     y = base_y
     for i, text in enumerate(lines):
-        if i == _state["active_index"]:
-            blf.color(font_id, *COLOR_ACTIVE)
-        else:
-            blf.color(font_id, *COLOR_TEXT)
+        color = COLOR_ACTIVE if i == _state["active_index"] else COLOR_TEXT
+        draw_text_with_outline(font_id, str(text), base_x, base_y - i * LINE_HEIGHT, color)
 
-        blf.position(
-            font_id,
-            base_x,
-            base_y - i * LINE_HEIGHT,
-            0
-        )
-        blf.draw(font_id, str(text))
+
+# Вспомогательнфая функция для обводки тектса
+
+def draw_text_with_outline(font_id, text, x, y, color, outline_color=(0, 0, 0, 1), outline_width=1):
+    # Обводка (рисуем текст вокруг основного положения)
+    for dx in (-outline_width, 0, outline_width):
+        for dy in (-outline_width, 0, outline_width):
+            if dx == 0 and dy == 0:
+                continue
+            blf.color(font_id, *outline_color)
+            blf.position(font_id, x + dx, y + dy, 0)
+            blf.draw(font_id, text)
+    # Основной текст
+    blf.color(font_id, *color)
+    blf.position(font_id, x, y, 0)
+    blf.draw(font_id, text)

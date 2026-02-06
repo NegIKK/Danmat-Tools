@@ -120,41 +120,37 @@ def move_to_collection(objects_to_move, target_collection):
 
 #region Bool and Objects
 
-def show_utility_objects(obj):
-    if not obj.children:
-        return
+# def show_utility_objects(obj):
     
-    if obj.hide_get():
-        obj.hide_set(False)
+#     if obj.hide_get():
+#         obj.hide_set(False)
 
-    utils = []
+#     utils = []
     
-    for child in obj.children:
-        if child.display_type in {'BOUNDS', 'WIRE'}:
-            utils.extend([child])
+#     for child in obj.children:
+#         if child.display_type in {'BOUNDS', 'WIRE'}:
+#             utils.extend([child])
             
-    for mod_obj in get_modifier_objects(obj):
-        utils.extend([mod_obj])
+#     for mod_obj in get_modifier_objects(obj):
+#         utils.extend([mod_obj])
 
-    for u in utils:        
-        u.hide_set(0)
+#     for u in utils:        
+#         u.hide_set(0)
        
 
-def hide_utility_objects(obj):
-    if not obj.children:
-        return
+# def hide_utility_objects(obj):
 
-    utils = []
+#     utils = []
     
-    for child in obj.children:
-        if child.display_type in {'BOUNDS', 'WIRE'}:
-            utils.extend([child])
+#     for child in obj.children:
+#         if child.display_type in {'BOUNDS', 'WIRE'}:
+#             utils.extend([child])
             
-    for mod_obj in get_modifier_objects(obj):
-        utils.extend([mod_obj])
+#     for mod_obj in get_modifier_objects(obj):
+#         utils.extend([mod_obj])
 
-    for u in utils:        
-        u.hide_set(1)
+#     for u in utils:        
+#         u.hide_set(1)
 
 
 def get_unparented_utility(obj):
@@ -163,6 +159,16 @@ def get_unparented_utility(obj):
     unused = mod_objects - children  # объекты из модификаторов, которые не являются дочерними
 
     return unused
+
+def toggle_utility_visibilty(obj):
+    # Если хотя бы один объект видим — выключить все
+    utils = get_utilities(obj)
+    if any(not util.hide_get() for util in utils):
+        for u in utils:        
+            u.hide_set(1)
+    else:
+        for u in utils:        
+            u.hide_set(0)
 
 
 def set_utility_as_child(obj):
@@ -177,6 +183,18 @@ def to_collection(obj):
     objs_to_move = get_modifier_objects(obj)
     move_to_collection(objs_to_move, create_helper_collection("Utils"))
 
+
+def get_utilities(obj):
+    utils = []
+    
+    for child in obj.children:
+        if child.display_type in {'BOUNDS', 'WIRE'}:
+            utils.extend([child])
+            
+    for mod_obj in get_modifier_objects(obj):
+        utils.extend([mod_obj])
+
+    return utils
 
 
 def get_modifier_objects(obj):
@@ -207,15 +225,61 @@ def get_modifier_objects(obj):
     return result
 
 
-def select_object_by_index(self, context, index):
+def set_active_modifier_for_object(main_obj, target_obj):
+    """Сделать активным модификатор, который использует target_obj (по логике get_modifier_objects)."""
+    for mod in main_obj.modifiers:
+        # Получаем объекты только для текущего модификатора!
+        mod_objects = set()
+        # 1. Стандартные POINTER-ссылки
+        for prop in mod.bl_rna.properties:
+            if prop.type == 'POINTER' and prop.fixed_type == bpy.types.Object:
+                linked_obj = getattr(mod, prop.identifier, None)
+                if linked_obj is not None:
+                    mod_objects.add(linked_obj)
+        # 2. Geometry Nodes: ищем объекты среди пользовательских свойств
+        if mod.type == 'NODES':
+            for key, value in mod.items():
+                if isinstance(value, bpy.types.Object):
+                    mod_objects.add(value)
+                if isinstance(value, (list, tuple)):
+                    for v in value:
+                        if isinstance(v, bpy.types.Object):
+                            mod_objects.add(v)
+        # 3. Boolean
+        if mod.type == 'BOOLEAN' and mod.object:
+            mod_objects.add(mod.object)
+        # 4. Curve
+        if mod.type == 'CURVE' and mod.object:
+            mod_objects.add(mod.object)
+        # Проверяем только объекты этого модификатора!
+        if target_obj in mod_objects:
+            main_obj.modifiers.active = mod
+            return
+
+
+def cycle_index(current, delta, length):
+    if length == 0:
+        return 0
+    return (current + delta) % length
+
+
+def select_object_by_index(self, context, index, initial_active=None):
     bpy.ops.object.select_all(action='DESELECT')
     if not self._items:
         return
     
-    obj = self._items[index]
-    if isinstance(obj, bpy.types.Object):
-        obj.select_set(True)
-        context.view_layer.objects.active = obj
+    for i, obj in enumerate(self._items):
+        if isinstance(obj, bpy.types.Object):
+            if i == index:
+                obj.hide_set(False)
+                if initial_active:
+                    # initial_active.select_set(True)
+                    context.view_layer.objects.active = initial_active
+                    # return
+                # obj.select_set(True)
+                # context.view_layer.objects.active = obj
+            else:
+                obj.hide_set(True)
 
 
 #region Remesh
