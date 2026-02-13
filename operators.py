@@ -78,14 +78,19 @@ class OBJECT_OT_RenameSimple(bpy.types.Operator):
     def invoke(self, context, event):
 
         objects = bpy.context.selected_objects
+        scene = bpy.context.scene
+        separator = getattr(scene.danmat_tools_props, 'name_separator')
+        
         if len(objects) <= 1:
             self.report({'WARNING'}, "Nothing to rename")
             
             return {'CANCELLED'}
         
         main_tools.rename()
-        if getattr(bpy.context.scene.danmat_tools_props, 'use_alt_separator') == True:
-            main_tools.swap_num_separator(objects, "_")
+        main_tools.swap_num_separator(objects, separator)
+
+        # if getattr(scene.danmat_tools_props, 'use_alt_separator') == True:
+            
 
         if event.alt:
             main_tools.set_wire_mode()
@@ -106,7 +111,10 @@ class OBJECT_OT_BakeGroupSelect(bpy.types.Operator):
    
     def invoke(self, context, event):
 
-        main_tools.ExtendSelectionToHigh()
+        obj = bpy.context.object
+        scene = bpy.context.scene
+
+        main_tools.select_bake_group(obj)
 
         if event.alt:
             bpy.ops.view3d.localview()

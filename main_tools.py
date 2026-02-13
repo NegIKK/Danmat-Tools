@@ -25,7 +25,7 @@ def rename():
         obj.name = base_name + "_high"
 
 
-def swap_num_separator(objects_to_rename, separator):
+def swap_num_separator(objects_to_rename, separator):  
     for obj in objects_to_rename:
         obj.name = obj.name.replace(".", separator)
             
@@ -35,24 +35,60 @@ def set_wire_mode():
     activeObject.display_type = 'WIRE'
 
 
-def ExtendSelectionToHigh():
-    obj = bpy.context.object
+def select_bake_group(obj):
+    # obj = bpy.context.object
     if not obj:
         return
-
-    splited_name = obj.name.split("_")
-    if len(splited_name) < 2:
-        return
     
-    del splited_name[-1]
+    base_name = get_base_name(obj.name)
 
     for o in bpy.data.objects:
-        splited_name_high = o.name.split("_")
-        del splited_name_high[-1]
-
-        if splited_name == splited_name_high:
-            # print(o.name)
+        if get_base_name(o.name) == base_name:
             o.select_set(True)
+
+def get_base_name(name: str) -> str:
+    """Удаление чисел и суффиксов"""
+    separatorList = "._-,;:'/"
+
+    parts = []
+    separators = []
+
+    current = ""
+    for ch in name:
+        
+        
+        if ch in separatorList:
+            parts.append(current)
+            separators.append(ch)
+            current = ""
+        else:
+            current += ch
+    parts.append(current)
+
+    # Удаляем хвостовые токены
+    while parts:
+        last = parts[-1].lower()
+
+        if last.isdigit():
+            parts.pop()
+            if separators:
+                separators.pop()
+        elif last in {"low", "high"}:
+            parts.pop()
+            if separators:
+                separators.pop()
+        else:
+            break
+
+    # Склеиваем обратно
+    result = parts[0] if parts else ""
+
+    for sep, part in zip(separators, parts[1:]):
+        result += sep + part
+
+    print(separatorList)
+    return result
+
 
 # endregion Renaming
 

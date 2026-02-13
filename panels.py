@@ -86,7 +86,7 @@ class VIEW3D_PT_Naming(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         layout = self.layout
         scene = context.scene
 
-        col = layout.column(align=True)
+        col = layout.column()
         row = col.row(align=True)
         row.operator(operators.OBJECT_OT_RenameSimple.bl_idname)
         # row.operator(operators.OBJECT_OT_RenameIsolate.bl_idname)
@@ -94,7 +94,8 @@ class VIEW3D_PT_Naming(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         row.operator(operators.OBJECT_OT_BakeGroupSelect.bl_idname)
         
         row = col.row(align=True)
-        row.prop(scene.danmat_tools_props, "use_alt_separator")
+        # row.prop(scene.danmat_tools_props, "use_alt_separator")
+        col.prop(scene.danmat_tools_props, "digits_separator")
 
 
 
