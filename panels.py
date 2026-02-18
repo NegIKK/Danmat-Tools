@@ -6,30 +6,6 @@ def get_panel_category():
     return prefs.panel_category
 
 
-# class UV_PT_CustomPanel(bpy.types.Panel):
-#     bl_label = "UV Edge Selector"
-#     bl_space_type = 'IMAGE_EDITOR'
-#     bl_region_type = 'UI'
-#     bl_category = 'TEMP'
-
-#     @classmethod
-#     def poll(cls, context):
-#         cls.bl_category = get_panel_category()
-#         return True
-
-#     def draw(self, context):
-#         layout = self.layout
-#         scene = context.scene
-
-#         layout.label(text='Debug')
-        
-#         col = layout.column(align=True)
-#         col.operator(operators.UV_OT_DebugTestA.bl_idname)
-
-#         row = col.row(align=True)
-#         row.prop(scene.uv_edge_selector, "min_angle")
-#         row.prop(scene.uv_edge_selector, "max_angle")
-
 
 class VIEW3D_PT_DanmatPanel:
     bl_space_type = 'VIEW_3D'
@@ -43,13 +19,28 @@ class VIEW3D_PT_DanmatPanel:
         return True
 
         
+
 class VIEW3D_PT_Main(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
     bl_idname = "VIEW3D_PT_Main"
     bl_label = "Danmat Tools"
 
     def draw(self, context):
         layout = self.layout
-        
+        scene = context.scene
+
+        row = layout.row()
+        col = layout.column(align=True)
+
+        col.operator(operators.VIEW3D_OT_MainPieMenu.bl_idname)
+        col.separator()
+        col.operator(operators.OBJECT_OT_ToggleUtilsVisibility.bl_idname)
+        col.operator(operators.VIEW3D_OT_OverlayManageUtils.bl_idname)
+        col.separator()
+        col.prop(scene.danmat_tools_props, "set_selected_util_obj_active")
+        # col.operator(operators.VIEW3D_OT_ToggleFlippedFaces.bl_idname)
+        # col.operator(operators.OBJECT_OT_BoolSetChildren.bl_idname)
+        # col.operator(operators.OBJECT_OT_SelectUnusedUtility.bl_idname)
+
         # DEBUG
         # row = layout.row()
         # row.label(text= "DEBUG")
@@ -58,23 +49,25 @@ class VIEW3D_PT_Main(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         # row.operator("object.flip_screw")
        
 
-class VIEW3D_PT_Bool(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
-    bl_parent_id = "VIEW3D_PT_Main"
-    bl_label = "Bools"
 
-    def draw(self, context):
-        layout = self.layout
+# class VIEW3D_PT_Bool(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
+#     bl_parent_id = "VIEW3D_PT_Main"
+#     bl_label = "Bools"
 
-        # Bools
-        # row = layout.row()
-        # row.label(text= "Bools")
+#     def draw(self, context):
+#         layout = self.layout
 
-        col = layout.column(align=True)
-        row = col.row(align=True)
-        row.operator(operators.OBJECT_OT_BoolHide.bl_idname)
-        row.operator(operators.OBJECT_OT_BoolShow.bl_idname)
-        col.operator(operators.OBJECT_OT_BoolSetChildren.bl_idname)
-        col.operator(operators.OBJECT_OT_SelectUnusedUnility.bl_idname)
+#         # Bools
+#         # row = layout.row()
+#         # row.label(text= "Bools")
+
+#         col = layout.column(align=True)
+#         row = col.row(align=True)
+#         row.operator(operators.OBJECT_OT_ToggleUtilsVisibility.bl_idname)
+#         col.operator(operators.VIEW3D_OT_OverlayManageUtils.bl_idname)
+#         col.operator(operators.OBJECT_OT_BoolSetChildren.bl_idname)
+#         # col.operator(operators.OBJECT_OT_SelectUnusedUtility.bl_idname)
+
 
 
 # class VIEW3D_PT_Remesh(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
@@ -89,6 +82,7 @@ class VIEW3D_PT_Bool(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
 #         row.operator("object.remesh_disable")
 
 
+
 class VIEW3D_PT_Naming(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
     bl_parent_id = "VIEW3D_PT_Main"
     bl_label = "Naming"
@@ -97,23 +91,67 @@ class VIEW3D_PT_Naming(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         layout = self.layout
         scene = context.scene
 
-        col = layout.column(align=True)
+        col = layout.column()
         row = col.row(align=True)
         row.operator(operators.OBJECT_OT_RenameSimple.bl_idname)
         # row.operator(operators.OBJECT_OT_RenameIsolate.bl_idname)
 
-        row.operator(operators.OBJECT_OT_ExtendSelection.bl_idname)
+        row.operator(operators.OBJECT_OT_BakeGroupSelect.bl_idname)
         
         row = col.row(align=True)
-        row.prop(scene.danmat_tools_props, "use_alt_separator")
+        # row.prop(scene.danmat_tools_props, "use_alt_separator")
+        col.separator()
+        col.label(text="Settings")
+        col.prop(scene.danmat_tools_props, "wire_after_rename")
+        col.prop(scene.danmat_tools_props, "hide_after_rename")
+        col.prop(scene.danmat_tools_props, "digits_separator")
+
+
+
+class VIEW3D_PT_Testing(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
+    bl_parent_id = "VIEW3D_PT_Main"
+    bl_label = "Testing"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        col = layout.column(align=True)
+        row = col.row(align=True)
+        # col.operator(operators.VIEW3D_OT_overlay_example.bl_idname)
+        # col.separator()
+        # col.operator(operators.VIEW3D_OT_overlay_select_object.bl_idname)
+        col.separator()
+        
+        # col.operator(operators.OBJECT_OT_GetModifiersObjects.bl_idname)
+
+
+
+# Pie Menu
+
+class VIEW3D_MT_MainPieMenu(bpy.types.Menu):
+    bl_idname = "VIEW3D_MT_main_pie_menu"
+    bl_label = "Danmat Tools"
+
+    def draw(self, context):
+        pie = self.layout.menu_pie()
+        pie.operator(operators.OBJECT_OT_RenameSimple.bl_idname) # left
+        pie.operator(operators.VIEW3D_OT_OverlayManageUtils.bl_idname) # right
+        pie.separator() # bottom
+        pie.operator(operators.OBJECT_OT_ToggleUtilsVisibility.bl_idname) # top
+        pie.separator() # left up
+        pie.separator() # right up
+        pie.operator(operators.OBJECT_OT_BakeGroupSelect.bl_idname)
 
 
 classes_to_register = [
     # VIEW3D_PT_DanmatPanel,
     VIEW3D_PT_Main,
-    VIEW3D_PT_Bool,
+    # VIEW3D_PT_Bool,
     # PT_Remesh,
-    VIEW3D_PT_Naming
+    VIEW3D_PT_Naming,
+    # VIEW3D_PT_Testing,
+    VIEW3D_MT_MainPieMenu
 ]
 
 def register():

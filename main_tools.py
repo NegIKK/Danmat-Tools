@@ -25,7 +25,7 @@ def rename():
         obj.name = base_name + "_high"
 
 
-def swap_num_separator(objects_to_rename, separator):
+def swap_num_separator(objects_to_rename, separator):  
     for obj in objects_to_rename:
         obj.name = obj.name.replace(".", separator)
             
@@ -35,24 +35,60 @@ def set_wire_mode():
     activeObject.display_type = 'WIRE'
 
 
-def ExtendSelectionToHigh():
-    obj = bpy.context.object
+def select_bake_group(obj):
+    # obj = bpy.context.object
     if not obj:
         return
-
-    splited_name = obj.name.split("_")
-    if len(splited_name) < 2:
-        return
     
-    del splited_name[-1]
+    base_name = get_base_name(obj.name)
 
     for o in bpy.data.objects:
-        splited_name_high = o.name.split("_")
-        del splited_name_high[-1]
-
-        if splited_name == splited_name_high:
-            # print(o.name)
+        if get_base_name(o.name) == base_name:
             o.select_set(True)
+
+def get_base_name(name: str) -> str:
+    """Удаление чисел и суффиксов для получения базового имени"""
+    separatorList = "._-,;:'/"
+
+    parts = []
+    separators = []
+
+    current = ""
+    for ch in name:
+        
+        
+        if ch in separatorList:
+            parts.append(current)
+            separators.append(ch)
+            current = ""
+        else:
+            current += ch
+    parts.append(current)
+
+    # Удаляем хвостовые токены
+    while parts:
+        last = parts[-1].lower()
+
+        if last.isdigit():
+            parts.pop()
+            if separators:
+                separators.pop()
+        elif last in {"low", "high"}:
+            parts.pop()
+            if separators:
+                separators.pop()
+        else:
+            break
+
+    # Склеиваем обратно
+    result = parts[0] if parts else ""
+
+    for sep, part in zip(separators, parts[1:]):
+        result += sep + part
+
+    print(separatorList)
+    return result
+
 
 # endregion Renaming
 
@@ -89,7 +125,7 @@ def create_helper_collection(suffix):
     colletction_of_selected_obj = get_collection_name_of_object(bpy.context.object)
     # print(colletction_of_selected_obj)
 
-    collection_name_to_create = colletction_of_selected_obj + "_" + suffix
+    collection_name_to_create = colletction_of_selected_obj + " " + suffix
 
     all_scene_collections = get_scene_collections()
     
@@ -119,101 +155,129 @@ def move_to_collection(objects_to_move, target_collection):
 #endregion Collections
 
 #region Bool and Objects
-def get_bool_objects(obj):
-    obj_names = []
-    for modifier in obj.modifiers:
-        if modifier.type == "BOOLEAN":
-            obj_names.insert(-1,modifier.object)
-    return(obj_names)
 
 
-def show_utility_objects(obj):
-    if not obj.children:
-        return
-    
-    if obj.hide_get():
-        obj.hide_set(False)
+def get_unparented_utility(obj):
+    mod_objects = set(get_modifier_objects(obj))
+    children = set(obj.children)
+    unused = mod_objects - children  # объекты из модификаторов, которые не являются дочерними
+
+    return unused
+
+
+def get_utilities(obj):
+    utils = []
     
     for child in obj.children:
-        
-        if child.display_type in {'BOUNDS', 'WIRE'}:           
-            child.hide_set(0)
-       
-
-def hide_utility_objects(obj):
-    if not obj.children:
-        return
-
-    for child in obj.children:
-
         if child.display_type in {'BOUNDS', 'WIRE'}:
-            hide_utility_objects(child)
-            child.hide_set(1)
-            # print("hide")
+            utils.extend([child])
+            
+    for mod_obj in get_modifier_objects(obj):
+        utils.extend([mod_obj])
+
+    return utils
 
 
-def set_children(obj):
-    for ob in get_bool_objects(obj):
+def toggle_utility_visibilty(obj):
+    # Если хотя бы один объект видим — выключить все
+    utils = get_utilities(obj)
+    if any(not util.hide_get() for util in utils):
+        for u in utils:        
+            u.hide_set(1)
+    else:
+        for u in utils:        
+            u.hide_set(0)
+
+
+def set_utility_as_child(obj):
+    for ob in get_unparented_utility(obj):
         ob.select_set(True)     # Выделить объекты
     
     bpy.ops.object.parent_set(keep_transform=True)
 
 
 def to_collection(obj):
-    create_helper_collection("BOOL")
-    objs_to_move = get_bool_objects(obj)
-    move_to_collection(objs_to_move, create_helper_collection("BOOL"))
+    create_helper_collection("Utils")
+    objs_to_move = get_modifier_objects(obj)
+    move_to_collection(objs_to_move, create_helper_collection("Utils"))
 
 
+# модальный оператор
 
-# --- Вспомогательная рекурсивная функция ---
-def collect_all_children(obj, out):
-    for child in obj.children:
-        out.add(child)
-        collect_all_children(child, out)
+def get_modifier_objects(obj):
+    result = set()
+    for mod in obj.modifiers:
+        if mod.type == 'NODES':
+            # Прямой доступ через keys() + mod[key]
+            for key in mod.keys():
+                value = mod[key]
+                if isinstance(value, bpy.types.Object):
+                    result.add(value)
+                elif isinstance(value, bpy.types.Collection):
+                    result.update(value.objects)
+        else:
+            # Стандартные POINTER-ссылки
+            for prop in mod.bl_rna.properties:
+                if prop.type == 'POINTER' and prop.fixed_type.identifier == 'Object':
+                    linked_obj = getattr(mod, prop.identifier, None)
+                    if linked_obj:
+                        result.add(linked_obj)
+    return result
 
 
-# --- Определение детей, участвующих в модификаторах ---
-def get_children_used_in_modifiers(active_obj, children):
-    used = set()
-
-    for mod in active_obj.modifiers:
+def set_active_modifier_for_object(main_obj, target_obj):
+    """Сделать активным модификатор, который использует target_obj (по логике get_modifier_objects)."""
+    for mod in main_obj.modifiers:
+        # Получаем объекты только для текущего модификатора!
+        mod_objects = set()
+        # 1. Стандартные POINTER-ссылки
         for prop in mod.bl_rna.properties:
-            if prop.type == 'POINTER' and prop.fixed_type == bpy.types.Object:
+            if prop.type == 'POINTER' and prop.fixed_type.identifier == 'Object':
                 linked_obj = getattr(mod, prop.identifier, None)
-                if linked_obj in children:
-                    used.add(linked_obj)
+                if linked_obj is not None:
+                    mod_objects.add(linked_obj)
+        # 2. Geometry Nodes: ищем объекты среди пользовательских свойств
+        if mod.type == 'NODES':
+            for key, value in mod.items():
+                if isinstance(value, bpy.types.Object):
+                    mod_objects.add(value)
+                if isinstance(value, (list, tuple)):
+                    for v in value:
+                        if isinstance(v, bpy.types.Object):
+                            mod_objects.add(v)
+                # Если value — ссылка на Collection, добавить все объекты из неё
+                if isinstance(value, bpy.types.Collection):
+                    for obj_in_col in value.objects:
+                        mod_objects.add(obj_in_col)
+        # Проверяем только объекты этого модификатора!
+        if target_obj in mod_objects:
+            main_obj.modifiers.active = mod
+            return
 
-    return used
+
+def cycle_index(current, delta, length):
+    if length == 0:
+        return 0
+    return (current + delta) % length
 
 
-# --- Главная функция: выделить НЕ участвующих ---
-def select_unused_children_utility():
-    active = bpy.context.active_object
-    if not active:
-        return
-
-    # 1. Собираем всех детей
-    children = set()
-    collect_all_children(active, children)
-
-    if not children:
-        return
-
-    # 2. Определяем, какие используются
-    used = get_children_used_in_modifiers(active, children)
-
-    # 3. Неиспользуемые = все дети - используемые
-    unused = children - used
-
-    # 4. Выделяем
+def select_object_by_index(self, context, index, initial_active=None, set_active=False):
     bpy.ops.object.select_all(action='DESELECT')
-    for obj in unused:
-        obj.select_set(True)
-
-    # активный остаётся активным
-    active.select_set(True)
-    bpy.context.view_layer.objects.active = active
+    if not self._items:
+        return
+    
+    for i, obj in enumerate(self._items):
+        if isinstance(obj, bpy.types.Object):
+            if i == index:
+                obj.hide_set(False)
+                if set_active:
+                    # context.view_layer.objects.active = obj
+                    obj.select_set(True)
+                if initial_active:
+                    context.view_layer.objects.active = initial_active
+            else:
+                obj.hide_set(True)
+    
 
 
 #region Remesh
@@ -233,3 +297,41 @@ def remove(modifier_name):
         if modifier_to_remove is not None:
             obj.modifiers.remove(modifier_to_remove)
 #endregion Remesh
+
+
+def debug_modifier_objects(obj):
+    """Отладка: вывести информацию об объектах в модификаторах."""
+    print(f"\n=== Debug Modifiers for: {obj.name} ===")
+    for mod in obj.modifiers:
+        print(f"\nModifier: {mod.name} (type={mod.type})")
+        
+        if mod.type == 'NODES':
+            # Проверка всех возможных атрибутов
+            print(f"  Has 'node_group': {hasattr(mod, 'node_group')}")
+            print(f"  Has 'node_tree': {hasattr(mod, 'node_tree')}")
+            print(f"  Has 'mode': {hasattr(mod, 'mode')}")
+            
+            if hasattr(mod, 'node_group') and mod.node_group:
+                print(f"  node_group: {mod.node_group.name}")
+            elif hasattr(mod, 'node_tree') and mod.node_tree:
+                print(f"  node_tree: {mod.node_tree.name}")
+            
+            print(f"  keys(): {list(mod.keys())}")
+            try:
+                print(f"  items(): {list(mod.items())}")
+            except Exception as e:
+                print(f"  items() error: {e}")
+            
+            for key in mod.keys():
+                try:
+                    value = mod[key]
+                    print(f"    {key} = {value} ({type(value).__name__})")
+                except Exception as e:
+                    print(f"    {key} = ERROR: {e}")
+        else:
+            # Отладка для обычных модификаторов
+            print(f"  bl_rna.properties:")
+            for prop in mod.bl_rna.properties:
+                if prop.type == 'POINTER':
+                    val = getattr(mod, prop.identifier, None)
+                    print(f"    {prop.identifier}: type={prop.type}, fixed_type={prop.fixed_type}, value={val}")
