@@ -26,6 +26,8 @@ class VIEW3D_PT_Main(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        scene = context.scene
+
         row = layout.row()
         col = layout.column(align=True)
 
@@ -33,9 +35,12 @@ class VIEW3D_PT_Main(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         col.separator()
         col.operator(operators.OBJECT_OT_ToggleUtilsVisibility.bl_idname)
         col.operator(operators.VIEW3D_OT_OverlayManageUtils.bl_idname)
+        col.separator()
+        col.prop(scene.danmat_tools_props, "set_selected_util_obj_active")
+        # col.operator(operators.VIEW3D_OT_ToggleFlippedFaces.bl_idname)
         # col.operator(operators.OBJECT_OT_BoolSetChildren.bl_idname)
         # col.operator(operators.OBJECT_OT_SelectUnusedUtility.bl_idname)
-        
+
         # DEBUG
         # row = layout.row()
         # row.label(text= "DEBUG")
@@ -95,6 +100,10 @@ class VIEW3D_PT_Naming(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         
         row = col.row(align=True)
         # row.prop(scene.danmat_tools_props, "use_alt_separator")
+        col.separator()
+        col.label(text="Settings")
+        col.prop(scene.danmat_tools_props, "wire_after_rename")
+        col.prop(scene.danmat_tools_props, "hide_after_rename")
         col.prop(scene.danmat_tools_props, "digits_separator")
 
 

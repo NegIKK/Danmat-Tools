@@ -1,8 +1,8 @@
 bl_info = {
     "name": "Danmat Tools",
-    "description": "Quick Bake Naming and Boolean Utilities",
+    "description": "Handy naming for bake and better modifier utilities control",
     "author": "Daniel Matus",
-    "version": (0, 6),
+    "version": (0, 7),
     "blender": (5, 0, 1),
     "location": "View3D > N-Panel",
     "category": "Tool (by Default)",

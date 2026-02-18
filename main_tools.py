@@ -47,7 +47,7 @@ def select_bake_group(obj):
             o.select_set(True)
 
 def get_base_name(name: str) -> str:
-    """Удаление чисел и суффиксов"""
+    """Удаление чисел и суффиксов для получения базового имени"""
     separatorList = "._-,;:'/"
 
     parts = []
@@ -156,38 +156,6 @@ def move_to_collection(objects_to_move, target_collection):
 
 #region Bool and Objects
 
-# def show_utility_objects(obj):
-    
-#     if obj.hide_get():
-#         obj.hide_set(False)
-
-#     utils = []
-    
-#     for child in obj.children:
-#         if child.display_type in {'BOUNDS', 'WIRE'}:
-#             utils.extend([child])
-            
-#     for mod_obj in get_modifier_objects(obj):
-#         utils.extend([mod_obj])
-
-#     for u in utils:        
-#         u.hide_set(0)
-       
-
-# def hide_utility_objects(obj):
-
-#     utils = []
-    
-#     for child in obj.children:
-#         if child.display_type in {'BOUNDS', 'WIRE'}:
-#             utils.extend([child])
-            
-#     for mod_obj in get_modifier_objects(obj):
-#         utils.extend([mod_obj])
-
-#     for u in utils:        
-#         u.hide_set(1)
-
 
 def get_unparented_utility(obj):
     mod_objects = set(get_modifier_objects(obj))
@@ -195,6 +163,20 @@ def get_unparented_utility(obj):
     unused = mod_objects - children  # объекты из модификаторов, которые не являются дочерними
 
     return unused
+
+
+def get_utilities(obj):
+    utils = []
+    
+    for child in obj.children:
+        if child.display_type in {'BOUNDS', 'WIRE'}:
+            utils.extend([child])
+            
+    for mod_obj in get_modifier_objects(obj):
+        utils.extend([mod_obj])
+
+    return utils
+
 
 def toggle_utility_visibilty(obj):
     # Если хотя бы один объект видим — выключить все
@@ -220,44 +202,26 @@ def to_collection(obj):
     move_to_collection(objs_to_move, create_helper_collection("Utils"))
 
 
-def get_utilities(obj):
-    utils = []
-    
-    for child in obj.children:
-        if child.display_type in {'BOUNDS', 'WIRE'}:
-            utils.extend([child])
-            
-    for mod_obj in get_modifier_objects(obj):
-        utils.extend([mod_obj])
-
-    return utils
-
+# модальный оператор
 
 def get_modifier_objects(obj):
-    """Возвращает set всех объектов, участвующих в модификаторах объекта obj, включая Geometry Nodes."""
     result = set()
     for mod in obj.modifiers:
-        # 1. Стандартные POINTER-ссылки
-        for prop in mod.bl_rna.properties:
-            if prop.type == 'POINTER' and prop.fixed_type == bpy.types.Object:
-                linked_obj = getattr(mod, prop.identifier, None)
-                if linked_obj is not None:
-                    result.add(linked_obj)
-        
-        # 2. Geometry Nodes: ищем объекты среди пользовательских свойств
         if mod.type == 'NODES':
-            for key, value in mod.items():
+            # Прямой доступ через keys() + mod[key]
+            for key in mod.keys():
+                value = mod[key]
                 if isinstance(value, bpy.types.Object):
                     result.add(value)
-                # Если value — коллекция объектов, добавить их тоже
-                if isinstance(value, (list, tuple)):
-                    for v in value:
-                        if isinstance(v, bpy.types.Object):
-                            result.add(v)
-        
-        if mod.type == 'BOOLEAN' and mod.object:
-            result.add(mod.object)
-
+                elif isinstance(value, bpy.types.Collection):
+                    result.update(value.objects)
+        else:
+            # Стандартные POINTER-ссылки
+            for prop in mod.bl_rna.properties:
+                if prop.type == 'POINTER' and prop.fixed_type.identifier == 'Object':
+                    linked_obj = getattr(mod, prop.identifier, None)
+                    if linked_obj:
+                        result.add(linked_obj)
     return result
 
 
@@ -268,7 +232,7 @@ def set_active_modifier_for_object(main_obj, target_obj):
         mod_objects = set()
         # 1. Стандартные POINTER-ссылки
         for prop in mod.bl_rna.properties:
-            if prop.type == 'POINTER' and prop.fixed_type == bpy.types.Object:
+            if prop.type == 'POINTER' and prop.fixed_type.identifier == 'Object':
                 linked_obj = getattr(mod, prop.identifier, None)
                 if linked_obj is not None:
                     mod_objects.add(linked_obj)
@@ -281,12 +245,10 @@ def set_active_modifier_for_object(main_obj, target_obj):
                     for v in value:
                         if isinstance(v, bpy.types.Object):
                             mod_objects.add(v)
-        # 3. Boolean
-        if mod.type == 'BOOLEAN' and mod.object:
-            mod_objects.add(mod.object)
-        # 4. Curve
-        if mod.type == 'CURVE' and mod.object:
-            mod_objects.add(mod.object)
+                # Если value — ссылка на Collection, добавить все объекты из неё
+                if isinstance(value, bpy.types.Collection):
+                    for obj_in_col in value.objects:
+                        mod_objects.add(obj_in_col)
         # Проверяем только объекты этого модификатора!
         if target_obj in mod_objects:
             main_obj.modifiers.active = mod
@@ -299,7 +261,7 @@ def cycle_index(current, delta, length):
     return (current + delta) % length
 
 
-def select_object_by_index(self, context, index, initial_active=None):
+def select_object_by_index(self, context, index, initial_active=None, set_active=False):
     bpy.ops.object.select_all(action='DESELECT')
     if not self._items:
         return
@@ -308,14 +270,14 @@ def select_object_by_index(self, context, index, initial_active=None):
         if isinstance(obj, bpy.types.Object):
             if i == index:
                 obj.hide_set(False)
+                if set_active:
+                    # context.view_layer.objects.active = obj
+                    obj.select_set(True)
                 if initial_active:
-                    # initial_active.select_set(True)
                     context.view_layer.objects.active = initial_active
-                    # return
-                # obj.select_set(True)
-                # context.view_layer.objects.active = obj
             else:
                 obj.hide_set(True)
+    
 
 
 #region Remesh
@@ -335,3 +297,41 @@ def remove(modifier_name):
         if modifier_to_remove is not None:
             obj.modifiers.remove(modifier_to_remove)
 #endregion Remesh
+
+
+def debug_modifier_objects(obj):
+    """Отладка: вывести информацию об объектах в модификаторах."""
+    print(f"\n=== Debug Modifiers for: {obj.name} ===")
+    for mod in obj.modifiers:
+        print(f"\nModifier: {mod.name} (type={mod.type})")
+        
+        if mod.type == 'NODES':
+            # Проверка всех возможных атрибутов
+            print(f"  Has 'node_group': {hasattr(mod, 'node_group')}")
+            print(f"  Has 'node_tree': {hasattr(mod, 'node_tree')}")
+            print(f"  Has 'mode': {hasattr(mod, 'mode')}")
+            
+            if hasattr(mod, 'node_group') and mod.node_group:
+                print(f"  node_group: {mod.node_group.name}")
+            elif hasattr(mod, 'node_tree') and mod.node_tree:
+                print(f"  node_tree: {mod.node_tree.name}")
+            
+            print(f"  keys(): {list(mod.keys())}")
+            try:
+                print(f"  items(): {list(mod.items())}")
+            except Exception as e:
+                print(f"  items() error: {e}")
+            
+            for key in mod.keys():
+                try:
+                    value = mod[key]
+                    print(f"    {key} = {value} ({type(value).__name__})")
+                except Exception as e:
+                    print(f"    {key} = ERROR: {e}")
+        else:
+            # Отладка для обычных модификаторов
+            print(f"  bl_rna.properties:")
+            for prop in mod.bl_rna.properties:
+                if prop.type == 'POINTER':
+                    val = getattr(mod, prop.identifier, None)
+                    print(f"    {prop.identifier}: type={prop.type}, fixed_type={prop.fixed_type}, value={val}")
