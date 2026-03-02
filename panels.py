@@ -37,6 +37,7 @@ class VIEW3D_PT_Main(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         col.operator(operators.VIEW3D_OT_OverlayManageUtils.bl_idname)
         col.separator()
         col.prop(scene.danmat_tools_props, "set_selected_util_obj_active")
+        col.prop(scene.danmat_tools_props, "exclude_mirror")
         # col.operator(operators.VIEW3D_OT_ToggleFlippedFaces.bl_idname)
         # col.operator(operators.OBJECT_OT_BoolSetChildren.bl_idname)
         # col.operator(operators.OBJECT_OT_SelectUnusedUtility.bl_idname)
@@ -129,6 +130,17 @@ class VIEW3D_PT_Testing(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
 
 # Pie Menu
 
+# class OBJECT_PT_PieMenuPanel(bpy.types.Panel):
+#     bl_idname = "OBJECT_PT_pie_menu_panel"
+#     bl_label = "Settings"
+#     bl_space_type = "VIEW_3D"
+#     bl_region_type = "TOOLS"
+#     bl_category = "category"
+
+#     def draw(self, context):
+#         layout = self.layout
+        
+
 class VIEW3D_MT_MainPieMenu(bpy.types.Menu):
     bl_idname = "VIEW3D_MT_main_pie_menu"
     bl_label = "Danmat Tools"
@@ -137,7 +149,13 @@ class VIEW3D_MT_MainPieMenu(bpy.types.Menu):
         pie = self.layout.menu_pie()
         pie.operator(operators.OBJECT_OT_RenameSimple.bl_idname) # left
         pie.operator(operators.VIEW3D_OT_OverlayManageUtils.bl_idname) # right
-        pie.separator() # bottom
+
+        pie.separator()
+        # op = pie.operator("wm.call_panel") # bottom
+        # op.name = "VIEW3D_PT_Main"
+        # op.keep_open = True
+
+
         pie.operator(operators.OBJECT_OT_ToggleUtilsVisibility.bl_idname) # top
         pie.separator() # left up
         pie.separator() # right up

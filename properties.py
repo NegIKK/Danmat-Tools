@@ -16,6 +16,11 @@ class DanmatToolsProps(bpy.types.PropertyGroup):
         description="Set the selected utility object as active while scrolling through the list",
         default= False
     )
+    exclude_mirror: props.BoolProperty( # type: ignore
+        name= "Exclude Mirror Objects",
+        description="Exclude objects from Mirror modifiers when scrolling through utilities",
+        default= False
+    )
 
     use_alt_separator: props.BoolProperty( # type: ignore
         name= "Alternative Separator",

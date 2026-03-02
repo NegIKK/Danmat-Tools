@@ -55,8 +55,6 @@ def get_base_name(name: str) -> str:
 
     current = ""
     for ch in name:
-        
-        
         if ch in separatorList:
             parts.append(current)
             separators.append(ch)
@@ -65,15 +63,21 @@ def get_base_name(name: str) -> str:
             current += ch
     parts.append(current)
 
-    # Удаляем хвостовые токены
+    # Сначала удаляем хвостовые цифры (дубликаты Blender .001, .002)
     while parts:
-        last = parts[-1].lower()
-
+        last = parts[-1]
         if last.isdigit():
             parts.pop()
             if separators:
                 separators.pop()
-        elif last in {"low", "high"}:
+        else:
+            break
+
+    # Затем удаляем только low/high (цифры ПЕРЕД ними НЕ трогаем - это часть имени!)
+    while parts:
+        last = parts[-1].lower()
+        
+        if last in {"low", "high"}:
             parts.pop()
             if separators:
                 separators.pop()
@@ -82,11 +86,9 @@ def get_base_name(name: str) -> str:
 
     # Склеиваем обратно
     result = parts[0] if parts else ""
-
     for sep, part in zip(separators, parts[1:]):
         result += sep + part
 
-    print(separatorList)
     return result
 
 
@@ -165,22 +167,18 @@ def get_unparented_utility(obj):
     return unused
 
 
-def get_utilities(obj):
+def toggle_utility_visibilty(obj, exclude_mirror=False):
+    
     utils = []
     
     for child in obj.children:
         if child.display_type in {'BOUNDS', 'WIRE'}:
             utils.extend([child])
             
-    for mod_obj in get_modifier_objects(obj):
+    for mod_obj in get_modifier_objects(obj, exclude_mirror):
         utils.extend([mod_obj])
-
-    return utils
-
-
-def toggle_utility_visibilty(obj):
+    
     # Если хотя бы один объект видим — выключить все
-    utils = get_utilities(obj)
     if any(not util.hide_get() for util in utils):
         for u in utils:        
             u.hide_set(1)
@@ -204,9 +202,11 @@ def to_collection(obj):
 
 # модальный оператор
 
-def get_modifier_objects(obj):
+def get_modifier_objects(obj, exclude_mirror=False):
     result = set()
     for mod in obj.modifiers:
+        if exclude_mirror and mod.type == 'MIRROR':
+            continue
         if mod.type == 'NODES':
             # Прямой доступ через keys() + mod[key]
             for key in mod.keys():
@@ -225,11 +225,13 @@ def get_modifier_objects(obj):
     return result
 
 
-def set_active_modifier_for_object(main_obj, target_obj):
+def set_active_modifier_for_object(main_obj, target_obj, exclude_mirror=False):
     """Сделать активным модификатор, который использует target_obj (по логике get_modifier_objects)."""
     for mod in main_obj.modifiers:
         # Получаем объекты только для текущего модификатора!
         mod_objects = set()
+        if exclude_mirror and mod.type == 'MIRROR':
+            continue
         # 1. Стандартные POINTER-ссылки
         for prop in mod.bl_rna.properties:
             if prop.type == 'POINTER' and prop.fixed_type.identifier == 'Object':

@@ -21,9 +21,10 @@ class OBJECT_OT_ToggleUtilsVisibility(bpy.types.Operator):
     bl_options = {'UNDO'}
    
     def execute(self, context):
+        exclude_mirror = getattr(bpy.context.scene.danmat_tools_props, 'exclude_mirror', False)
 
         for obj in bpy.context.selected_objects:
-            main_tools.toggle_utility_visibilty(obj)
+            main_tools.toggle_utility_visibilty(obj, exclude_mirror)
 
         return {'FINISHED'}
     
@@ -191,14 +192,15 @@ class VIEW3D_OT_OverlayManageUtils(bpy.types.Operator):
     def invoke(self, context, event):
 
         obj = context.active_object
+        exclude_mirror = getattr(bpy.context.scene.danmat_tools_props, 'exclude_mirror')
         self._initial_active = context.active_object
 
         if context.mode != 'OBJECT':
             self.report({'WARNING'}, "Object mode only")
             return {'CANCELLED'}
 
-        # Берем объекты из модификаторов и конвертируем их в имена для верной работы
-        self._items = sorted(main_tools.get_modifier_objects(obj), key=lambda o: o.name)
+        # Берем все объекты из модификаторов
+        self._items = sorted(main_tools.get_modifier_objects(obj, exclude_mirror), key=lambda o: o.name)
         if not self._items:
             self.report({'WARNING'}, "No Utilities")
             return {'CANCELLED'}
@@ -228,6 +230,7 @@ class VIEW3D_OT_OverlayManageUtils(bpy.types.Operator):
 
     def modal(self, context, event):
         select_utility = getattr(bpy.context.scene.danmat_tools_props, 'set_selected_util_obj_active')
+        
 
         if event.type == 'MOUSEMOVE':
             screen_overlay.set_position(event.mouse_region_x, event.mouse_region_y)
@@ -271,6 +274,8 @@ class VIEW3D_OT_OverlayManageUtils(bpy.types.Operator):
 
 
     def finish(self, context, cancelled=False):
+        
+
         if self._draw_handler:
             bpy.types.SpaceView3D.draw_handler_remove(self._draw_handler, 'WINDOW')
             self._draw_handler = None
@@ -281,7 +286,8 @@ class VIEW3D_OT_OverlayManageUtils(bpy.types.Operator):
             self._initial_active.hide_set(False)
             self._initial_active.select_set(True)
 
-            utils = main_tools.get_modifier_objects(self._initial_active)
+            exclude_mirror = getattr(context.scene.danmat_tools_props, 'exclude_mirror', False)
+            utils = main_tools.get_modifier_objects(self._initial_active, exclude_mirror)
             for u in utils:
                 u.hide_set(True)
 
