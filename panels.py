@@ -1,5 +1,6 @@
 import bpy
 from . import operators
+from . import dev_operators
 
 def get_panel_category():
     prefs = bpy.context.preferences.addons[__package__].preferences
@@ -108,6 +109,22 @@ class VIEW3D_PT_Naming(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         col.prop(scene.danmat_tools_props, "digits_separator")
 
 
+class VIEW3D_PT_MeshEdit(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
+    bl_parent_id = "VIEW3D_PT_Main"
+    bl_label = "Mesh"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        col = layout.column()
+        row = col.row(align=True)
+
+        col.operator(operators.MESH_OT_SmartEdge.bl_idname)
+        col.operator(operators.MESH_OT_AlignGeo.bl_idname)
+        col.operator(operators.MESH_OT_Symmetrize.bl_idname)
+
+
 
 class VIEW3D_PT_Testing(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
     bl_parent_id = "VIEW3D_PT_Main"
@@ -119,11 +136,19 @@ class VIEW3D_PT_Testing(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
 
         col = layout.column(align=True)
         row = col.row(align=True)
+        col.operator(dev_operators.OBJECT_OT_testOperator1.bl_idname)
         # col.operator(operators.VIEW3D_OT_overlay_example.bl_idname)
         # col.separator()
         # col.operator(operators.VIEW3D_OT_overlay_select_object.bl_idname)
         col.separator()
         
+        # col.operator(dev_operators.MESH_OT_SmartEdge.bl_idname)
+        # col.operator(dev_operators.VIEW3D_OT_Focus.bl_idname)
+        # col.operator(dev_operators.MESH_OT_align_geo.bl_idname)
+        col.operator(dev_operators.VIEW3D_OT_SymmetryByAxisModal.bl_idname)
+        col.operator(dev_operators.MESH_OT_SetLength.bl_idname)
+        # col.operator(dev_operators.MESH_OT_Symmetrize.bl_idname)
+
         # col.operator(operators.OBJECT_OT_GetModifiersObjects.bl_idname)
 
 
@@ -167,8 +192,9 @@ classes_to_register = [
     VIEW3D_PT_Main,
     # VIEW3D_PT_Bool,
     # PT_Remesh,
+    VIEW3D_PT_MeshEdit,
     VIEW3D_PT_Naming,
-    # VIEW3D_PT_Testing,
+    VIEW3D_PT_Testing,
     VIEW3D_MT_MainPieMenu
 ]
 

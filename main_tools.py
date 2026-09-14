@@ -1,4 +1,7 @@
 import bpy
+import bmesh
+
+from mathutils import Vector, Matrix
 
 #region Renaming
 def rename():
@@ -337,3 +340,283 @@ def debug_modifier_objects(obj):
                 if prop.type == 'POINTER':
                     val = getattr(mod, prop.identifier, None)
                     print(f"    {prop.identifier}: type={prop.type}, fixed_type={prop.fixed_type}, value={val}")
+
+#region MeshMachine
+
+
+
+
+
+
+# Focus ######################
+
+def update_local_view(space_data, states):
+    """Обновляет видимость объектов внутри текущего Local View"""
+    for obj, visible in states:
+        space_data.local_view_set(obj, visible)
+
+
+def focus_step(context, view_space, selected_objs, history, exclude_modifiers=False):
+    """
+    Создает новый уровень изоляции объектов с поддержкой перехода из Edit Mode.
+    """
+    if not selected_objs:
+        return False
+
+    # Запоминаем исходный режим
+    initial_mode = context.mode
+    active_obj = context.active_object
+
+    # Если находимся в Edit Mode — временно переходим в Object Mode
+    if initial_mode.startswith('EDIT'):
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    epoch = history.add()
+    epoch.name = f"Epoch_{len(history) - 1}"
+
+    # Сохраняем объекты и их выделение
+    for obj in selected_objs:
+        entry = epoch.objects.add()
+        entry.obj = obj
+
+    # Отключение модификаторов MIRROR и ARRAY
+    if exclude_modifiers:
+        for obj in selected_objs:
+            for mod in obj.modifiers:
+                if mod.type in {'MIRROR', 'ARRAY'} and mod.show_viewport:
+                    mod.show_viewport = False
+                    entry = epoch.unmirrored.add()
+                    entry.obj = obj
+
+    # Сбрасываем текущий Local View при наличии
+    if view_space.local_view:
+        bpy.ops.view3d.localview(frame_selected=False)
+
+    # Выделяем только нужные объекты
+    bpy.ops.object.select_all(action='DESELECT')
+    for obj in selected_objs:
+        obj.select_set(True)
+
+    if active_obj and active_obj in selected_objs:
+        context.view_layer.objects.active = active_obj
+
+    # Переходим в Local View
+    bpy.ops.view3d.localview(frame_selected=False)
+
+    # Возвращаем исходный режим (если был EDIT)
+    if initial_mode.startswith('EDIT') and context.active_object:
+        bpy.ops.object.mode_set(mode='EDIT')
+
+    return True
+
+
+def unfocus_step(context, view_space, history):
+    """
+    Откатывает уровень изоляции назад с корректной обработкой контекста.
+    """
+    if not history:
+        if view_space.local_view:
+            bpy.ops.view3d.localview(frame_selected=False)
+        return
+
+    initial_mode = context.mode
+
+    # Если перешли в Edit Mode — переключаемся в Object Mode для манипуляций
+    if initial_mode.startswith('EDIT'):
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    last_epoch = history[-1]
+
+    # Восстанавливаем модификаторы
+    for entry in last_epoch.unmirrored:
+        if entry.obj:
+            for mod in entry.obj.modifiers:
+                if mod.type in {'MIRROR', 'ARRAY'}:
+                    mod.show_viewport = True
+
+    history.remove(len(history) - 1)
+
+    if view_space.local_view:
+        bpy.ops.view3d.localview(frame_selected=False)
+
+    # Если в истории есть предыдущие шаги
+    if len(history) > 0:
+        prev_epoch = history[-1]
+
+        bpy.ops.object.select_all(action='DESELECT')
+        saved_objs = [entry.obj for entry in prev_epoch.objects if entry.obj]
+        
+        for obj in saved_objs:
+            obj.select_set(True)
+
+        if saved_objs:
+            context.view_layer.objects.active = saved_objs[0]
+
+        bpy.ops.view3d.localview(frame_selected=False)
+
+    # Возвращаем режим редактирования, если мы из него выходили
+    if initial_mode.startswith('EDIT') and context.active_object:
+        bpy.ops.object.mode_set(mode='EDIT')
+
+
+def clear_focus_history(history):
+    """Очищает стек истории изоляции"""
+    history.clear()
+
+# Align #############
+
+AXIS_INDEX_MAPPING = {'X': 0, 'Y': 1, 'Z': 2}
+
+def get_matrix_for_space(context, space):
+    """Возвращает матрицу трансформации для указанного пространства."""
+    if space == 'LOCAL':
+        return context.active_object.matrix_world
+    elif space == 'CURSOR':
+        return context.scene.cursor.matrix
+    return Matrix()
+
+def get_selection_groups(bm, select_mode, align_each):
+    """Декомпозирует выделение на группы/островки."""
+    verts = [v for v in bm.verts if v.select]
+    if not verts:
+        return [], False
+
+    # Если выделены только вершины или включен выровнять по 0/Cursor
+    if select_mode[0]:
+        return [verts], False
+
+    # Если выделение ребер (EDGES)
+    if select_mode[1]:
+        visited = set()
+        edges = [e for e in bm.edges if e.select]
+        groups = []
+        for edge in edges:
+            if edge not in visited:
+                group_verts = set()
+                stack = [edge]
+                while stack:
+                    curr = stack.pop()
+                    if curr not in visited:
+                        visited.add(curr)
+                        group_verts.update(curr.verts)
+                        stack.extend([e for v in curr.verts for e in v.link_edges if e.select and e not in visited])
+                groups.append(list(group_verts))
+        
+        has_multiple = len(groups) > 1
+        return (groups if (has_multiple and align_each) else [verts]), has_multiple
+
+    # Если выделение граней (FACES)
+    if select_mode[2]:
+        visited = set()
+        faces = [f for f in bm.faces if f.select]
+        islands = []
+        for face in faces:
+            if face not in visited:
+                island_verts = set()
+                stack = [face]
+                while stack:
+                    curr = stack.pop()
+                    if curr not in visited:
+                        visited.add(curr)
+                        island_verts.update(curr.verts)
+                        stack.extend([f for e in curr.edges for f in e.link_faces if f.select and f not in visited])
+                islands.append(list(island_verts))
+
+        has_multiple = len(islands) > 1
+        return (islands if (has_multiple and align_each) else [verts]), has_multiple
+
+    return [verts], False
+
+
+def align_editmesh_geometry(context, align_type, axis_name, space, align_each=False):
+    """
+    Основная функция выравнивания. Применяется к активному BMesh.
+    """
+    active = context.active_object
+    bm = bmesh.from_edit_mesh(active.data)
+    bm.normal_update()
+    bm.verts.ensure_lookup_table()
+
+    axis = AXIS_INDEX_MAPPING[axis_name]
+    mx = get_matrix_for_space(context, space)
+    select_mode = tuple(context.scene.tool_settings.mesh_select_mode)
+
+    groups, has_multiple = get_selection_groups(bm, select_mode, align_each)
+    if not groups:
+        return False, False
+
+    for group in groups:
+        if space == 'LOCAL':
+            axiscoords = [v.co[axis] for v in group]
+        elif space == 'WORLD':
+            axiscoords = [(active.matrix_world @ v.co)[axis] for v in group]
+        elif space == 'CURSOR':
+            axiscoords = [(mx.inverted_safe() @ active.matrix_world @ v.co)[axis] for v in group]
+
+        if align_type == "MIN":
+            target = min(axiscoords)
+        elif align_type == "MAX":
+            target = max(axiscoords)
+        elif align_type == "ZERO":
+            target = 0
+        elif align_type == "AVERAGE":
+            target = sum(axiscoords) / len(axiscoords)
+        elif align_type == "CURSOR":
+            if space == 'LOCAL':
+                target = (mx.inverted_safe() @ context.scene.cursor.location)[axis]
+            elif space == 'WORLD':
+                target = context.scene.cursor.location[axis]
+            elif space == 'CURSOR':
+                target = 0
+
+        for v in group:
+            if space == 'LOCAL':
+                v.co[axis] = target
+            elif space == 'WORLD':
+                world_co = active.matrix_world @ v.co
+                world_co[axis] = target
+                v.co = active.matrix_world.inverted_safe() @ world_co
+            elif space == 'CURSOR':
+                cursor_co = mx.inverted_safe() @ active.matrix_world @ v.co
+                cursor_co[axis] = target
+                v.co = active.matrix_world.inverted_safe() @ mx @ cursor_co
+
+    bm.normal_update()
+    bmesh.update_edit_mesh(active.data)
+    return True, has_multiple
+
+
+# UTIL ##############
+
+def get_right_and_up_axes(context, mx):
+    r3d = context.space_data.region_3d
+
+    view_right = r3d.view_rotation @ Vector((1, 0, 0))
+    view_up = r3d.view_rotation @ Vector((0, 1, 0))
+    view_back = r3d.view_rotation @ Vector((0, 0, 1)) # Вектор глубины (взгляд)
+
+    axes_right, axes_up, axes_back = [], [], []
+
+    for idx, axis in enumerate([Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))]):
+        world_axis = mx.to_3x3() @ axis
+        axes_right.append((view_right.dot(world_axis), idx))
+        axes_up.append((view_up.dot(world_axis), idx))
+        axes_back.append((view_back.dot(world_axis), idx))
+
+    # Сортируем оси по степени совпадения
+    axes_right.sort(key=lambda x: abs(x[0]), reverse=True)
+    axes_up.sort(key=lambda x: abs(x[0]), reverse=True)
+
+    axis_right = axes_right[0]
+    axis_up = axes_up[0]
+
+    # ЗАЩИТА ОТ КОЛЛИЗИЙ: Если правая и верхняя оси совпали, берем для UP вторую по значимости
+    if axis_right[1] == axis_up[1]:
+        axis_up = axes_up[1]
+
+    flip_right = axis_right[0] < 0
+    flip_up = axis_up[0] < 0
+
+    return axis_right[1], axis_up[1], flip_right, flip_up
+
+#endregion
