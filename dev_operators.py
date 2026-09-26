@@ -702,14 +702,14 @@ Moves sengle vertex if no selection or whole selected geometry"""
 
         # --- STATE 1: ВЫБОР TARGET (Только вершина редактируемого объекта) ---
         elif self.state == 1:
-            draw_3d.add_point(self.anchor_co_world, color=(0.0, 1.0, 0.5, 1.0), size=8.0)
+            draw_3d.add_point(self.anchor_co_world, color=(0.0, 1.0, 0.5, 1.0))
 
             world_co, bm_v = self.find_snap_target(context, event)
 
             # Отрисовка ховера при наведении на вершину BMesh
             if bm_v:
                 self.hover_co_world = world_co
-                draw_3d.add_point(self.hover_co_world, color=(1.0, 0.8, 0.0, 1.0), size=8.0)
+                draw_3d.add_point(self.hover_co_world, color=(1.0, 0.8, 0.0, 1.0))
                 draw_3d.add_line(self.anchor_co_world, self.hover_co_world, color=(1.0, 0.8, 0.0, 0.8), width=2.0)
 
             screen_overlay.update_modal_overlay(
@@ -721,22 +721,26 @@ Moves sengle vertex if no selection or whole selected geometry"""
 
             # ФИКСАЦИЯ TARGET И ПЕРЕХОД В STATE 2 ТОЛЬКО ПО КЛИКУ ЛКМ:
             if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-                # Проверяем, что попали в вершину BMesh и она не совпадает с Anchor
                 if bm_v and bm_v != self.vert_anchor:
                     self.vert_target = bm_v
                     self.target_init_co = bm_v.co.copy()
                     self.target_co_world = world_co.copy()
 
-                    # Если целевая вершина не была выделена заранее — добавляем её одну
                     if self.vert_target not in self.selected_verts_init_co:
                         self.selected_verts_init_co[self.vert_target] = self.target_init_co
 
-                    # Расчет фиксированного центра отрезка Anchor -> Target
                     self.center_co_world = (self.anchor_co_world + self.target_co_world) * 0.5
 
-                    # Инициализируем дистанцию и сбрасываем ввод
-                    self.distance = (self.target_co_world - self.anchor_co_world).length
-                    self.input_string = ""
+                    # 1. Физическая длина в системных метрах Blender
+                    raw_len_meters = (self.target_co_world - self.anchor_co_world).length
+                    self.distance = raw_len_meters
+
+                    # 2. Конвертируем в единицы сцены (см/мм) для стартовой строки
+                    unit_scale = context.scene.unit_settings.scale_length
+                    scene_len = raw_len_meters
+                    
+                    self.input_string = f"{scene_len:.3f}"
+                    self.reset_input_on_key = True  # Первый ввод цифры СРАЗУ заменит эту строку
                     self.state = 2
 
                 return {'RUNNING_MODAL'}
@@ -748,25 +752,37 @@ Moves sengle vertex if no selection or whole selected geometry"""
                 self.use_center_mode = not self.use_center_mode
                 self.update_geometry(context)
 
-            # 1. ОБРАБОТКА ВВОДА И ОБНОВЛЕНИЕ ГЕОМЕТРИИ
-            if event.type == 'WHEELUPMOUSE' and event.value == 'PRESS':
+            # 1. КОЛЕСО МЫШИ
+            elif event.type == 'WHEELUPMOUSE' and event.value == 'PRESS':
+                unit_scale = 1
+                # unit_scale = context.scene.unit_settings.scale_length
                 step = 0.005 if event.shift else 0.05
-                self.distance += step
-                self.input_string = f"{self.distance:.3f}"
-                self.reset_input_on_key = True  # Сигнал: следующий ввод с клавы заменяет строку
+                
+                # Работаем в единицах сцены
+                current_scene_val = self.distance / unit_scale
+                new_scene_val = current_scene_val + step
+                
+                self.distance = new_scene_val * unit_scale
+                self.input_string = f"{new_scene_val:.3f}"
+                self.reset_input_on_key = True
                 self.update_geometry(context)
 
             elif event.type == 'WHEELDOWNMOUSE' and event.value == 'PRESS':
+                unit_scale = context.scene.unit_settings.scale_length
                 step = 0.005 if event.shift else 0.05
-                self.distance = max(0.0, self.distance - step)
-                self.input_string = f"{self.distance:.3f}"
-                self.reset_input_on_key = True  # Сигнал: следующий ввод с клавы заменяет строку
+                
+                current_scene_val = self.distance / unit_scale
+                new_scene_val = max(0.0, current_scene_val - step)
+                
+                self.distance = new_scene_val * unit_scale
+                self.input_string = f"{new_scene_val:.3f}"
+                self.reset_input_on_key = True
                 self.update_geometry(context)
 
-            elif event.ascii in "0123456789.," and event.value == 'PRESS':
+            # 2. ВВОД С КЛАВИАТУРЫ (ЦИФРЫ И ТОЧКА)
+            elif event.ascii in "0123456789.," and event.value in {'PRESS', 'TEXTINPUT'}:
                 char = "." if event.ascii == "," else event.ascii
                 
-                # Если до этого крутили колесо — сбрасываем строку и начинаем новый ввод
                 if self.reset_input_on_key:
                     self.input_string = char
                     self.reset_input_on_key = False
@@ -775,57 +791,47 @@ Moves sengle vertex if no selection or whole selected geometry"""
                     
                 self.parse_and_apply_input(context)
 
-            elif event.type == 'BACK_SPACE' and event.value == 'PRESS':
+            # 3. BACKSPACE (СТИРАНИЕ)
+            elif event.type == 'BACK_SPACE' and event.value in {'PRESS', 'TEXTINPUT'}:
                 if self.reset_input_on_key:
                     self.input_string = ""
                     self.reset_input_on_key = False
                 elif len(self.input_string) > 0:
                     self.input_string = self.input_string[:-1]
+                
                 self.parse_and_apply_input(context)
 
+            # 4. ПОДТВЕРЖДЕНИЕ / ОТМЕНА
             elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
                 self.finish(context)
                 return {'FINISHED'}
-            
-            if event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
-                self.finish(context, cancel=True)  # <-- Передаем cancel=True
-                return {'CANCELLED'}
-                    
-                bmesh.update_edit_mesh(self.obj.data)
+
+            elif event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
+                self.finish(context, cancel=True)
                 return {'CANCELLED'}
 
-            # 2. ПОЛУЧЕНИЕ АКТУАЛЬНОЙ ПОЗИЦИИ (ПОСЛЕ update_geometry!)
+            # 5. ОТРИСОВКА И ОВЕРЛЕЙ
             current_target_world = self.matrix_world @ self.vert_target.co
 
             if self.use_center_mode:
-                # Вычисляем симметричную противоположную точку (виртуальный Anchor)
                 simulated_anchor_world = self.center_co_world + (self.center_co_world - current_target_world)
-
-                # 1. Линия на всю длину (от противоположного края до Target)
                 draw_3d.add_line(simulated_anchor_world, current_target_world, color=(0.2, 0.6, 1.0, 0.5), width=2.0)
-                
-                # 2. Точки: виртуальная противоположная сторона, зафиксированный Центр и Target
-                draw_3d.add_point(simulated_anchor_world, color=(0.2, 0.6, 1.0, 0.5), size=6.0) # Отблеск 2-го края
-                draw_3d.add_point(self.center_co_world, color=(1.0, 0.4, 0.0, 1.0), size=10.0)    # Центр (оранжевый)
-                draw_3d.add_point(current_target_world, color=(0.2, 0.6, 1.0, 1.0), size=8.0)    # Target (активный)
+                draw_3d.add_point(simulated_anchor_world, color=(0.2, 0.6, 1.0, 0.5), size=6.0)
+                draw_3d.add_point(self.center_co_world, color=(1.0, 0.4, 0.0, 1.0), size=10.0)
+                draw_3d.add_point(current_target_world, color=(0.2, 0.6, 1.0, 1.0), size=8.0)
             else:
-                # Обычный Anchor Mode
                 draw_3d.add_point(self.anchor_co_world, color=(0.0, 1.0, 0.5, 1.0), size=8.0)
                 draw_3d.add_point(current_target_world, color=(0.2, 0.6, 1.0, 1.0), size=8.0)
                 draw_3d.add_line(self.anchor_co_world, current_target_world, color=(0.2, 0.6, 1.0, 1.0), width=3.0)
 
-            
-           # 4. ОБНОВЛЕНИЕ ОВЕРЛЕЯ (добавляем плашку с режимом)
             mode_label = "[CENTER]" if self.use_center_mode else "[ANCHOR]"
-            display_val = self.input_string if self.input_string else f"{self.distance:.2f}"
+            display_val = f"{self.input_string} {self.unit}" if self.input_string else f"0.000 {self.unit}"
 
             screen_overlay.update_modal_overlay(
                 mouse_2d=self.mouse_2d,
-                header=f"{display_val} {self.unit}",
-                description=f"Target Distance",
-                lines=[
-                    f"(C) Mode: {mode_label}",
-                ]
+                header=display_val,
+                description="Target Distance",
+                lines=[f"(C) Mode: {mode_label}"]
             )
 
         return {'RUNNING_MODAL'}
@@ -847,9 +853,19 @@ Moves sengle vertex if no selection or whole selected geometry"""
         context.area.tag_redraw()
 
     def parse_and_apply_input(self, context):
+        """Парсит значение в единицах сцены и переводит в метры Blender."""
+        if not self.input_string:
+            self.distance = 0.0
+            self.update_geometry(context)
+            return
+
         try:
-            val = float(self.input_string)
-            self.distance = max(0.0, val)
+            val_scene = float(self.input_string)
+            # unit_scale = context.scene.unit_settings.scale_length
+            unit_scale = 1
+            
+            # Переводим из введенных сантометров/миллиметров в реальные метры Blender
+            self.distance = max(0.0, val_scene * unit_scale)
             self.update_geometry(context)
         except ValueError:
             pass
