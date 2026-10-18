@@ -13,6 +13,9 @@ from . import dev_tools
 from .modules import bridge
 from . import screen_overlay
 from . import draw_3d
+from . import overlay_3d
+
+from . import mesh_set_length_core as core
 
 from bpy.props import EnumProperty, BoolProperty
 
@@ -25,16 +28,70 @@ class OBJECT_OT_testOperator1(bpy.types.Operator):
     bl_options = {"REGISTER", 'UNDO'}
 
     def execute(self, context):
+        overlay_3d.register()
+
         obj = context.active_object
-        bm = bmesh.from_edit_mesh(obj.data)
 
-        # Вызываем конкретную атомарную функцию когда нужно:
-        # main_tools.apply_bevel_weight(obj, bm, weight=1.0, mode='CHAMFER', amount=0.05)
-        
-        # Или запускаем контекстный диспатчер:
-        main_tools.smart_edge_contextual_action(context)
+        if obj is None or obj.type != 'MESH':
+            self.report({'WARNING'}, "Active object is not a mesh")
+            return {'CANCELLED'}
 
-        bmesh.update_edit_mesh(obj.data)
+        me = obj.data
+
+        # Вершины: первые 10.
+        if len(me.vertices):
+            overlay_3d.draw_vertex(
+                obj,
+                list(range(min(10, len(me.vertices)))),
+                color=(1.0, 0.2, 0.0, 1.0),
+                size=0.05,
+                fade=0.8,
+                appear=0.05,
+                overlay=True,
+            )
+
+        # Ребра: первые 5.
+        if len(me.edges):
+            overlay_3d.draw_edge(
+                obj,
+                list(range(min(5, len(me.edges)))),
+                color=(0.0, 1.0, 0.2, 1.0),
+                width=4.0,
+                fade=0.8,
+                appear=0.05,
+                overlay=True,
+            )
+
+        # Грани: первые 3.
+        if len(me.polygons):
+            overlay_3d.draw_face(
+                obj,
+                list(range(min(3, len(me.polygons)))),
+                color=(0.2, 0.5, 1.0, 0.35),
+                width=2.0,
+                fade=0.8,
+                appear=0.05,
+                overlay=False,
+            )
+
+        # Статичная линия с учетом глубины.
+        overlay_3d.draw_line(
+            Vector((0.0, 0.0, 0.0)),
+            Vector((2.0, 0.0, 0.0)),
+            color=(1.0, 1.0, 0.0, 1.0),
+            width=3.0,
+            overlay=False,
+        )
+
+        # Статичная линия поверх всего.
+        overlay_3d.draw_line(
+            Vector((0.0, 0.0, 0.0)),
+            Vector((0.0, 2.0, 0.0)),
+            color=(1.0, 0.0, 1.0, 1.0),
+            width=3.0,
+            overlay=True,
+        )
+
         return {'FINISHED'}
     
 
@@ -593,397 +650,144 @@ class VIEW3D_OT_SymmetryByAxisModal(bpy.types.Operator):
 
 class MESH_OT_SetLength(bpy.types.Operator):
     """Set distance between two points.
-Moves sengle vertex if no selection or whole selected geometry"""
+    Moves single vertex if no selection or whole selected geometry."""
+
     bl_idname = "mesh.set_length"
     bl_label = "Set Length"
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Set exact distance between two vertices/points"
+    bl_options = {"REGISTER", "UNDO"}
+
+    # Fallback, если внешней property нет.
+    LIVE_PREVIEW = False
+
+    # Строгий vertex snap в пикселях.
+    SNAP_PIXELS = 24.0
 
     @classmethod
     def poll(cls, context):
-        return context.mode == 'EDIT_MESH' and context.selected_objects
-    
+        obj = context.active_object
+        return (
+            context.mode == "EDIT_MESH"
+            and obj is not None
+            and obj.type == "MESH"
+        )
+
     def invoke(self, context, event):
-        self.reset_input_on_key = False
-
-        self.obj = context.active_object
-        self.bm = bmesh.from_edit_mesh(self.obj.data)
-        self.bm.verts.ensure_lookup_table()
-        self.matrix_world = self.obj.matrix_world
-        self.matrix_world_inv = self.matrix_world.inverted()
-
-        self.use_center_mode = False   # Переключатель режима (C)
-        self.center_co_world = Vector() # Фиксированная середина отрезка
-
-        scene_unit = context.scene.unit_settings.length_unit
-
-        unit_labels = {
-            'MILLIMETERS': 'mm',
-            'CENTIMETERS': 'cm',
-            'METERS': 'm',
-            'KILOMETERS': 'km',
-            'INCHES': 'in',
-            'FEET': 'ft',
-        }
-
-        self.unit = unit_labels.get(scene_unit, 'm')
-
-        # Состояние оператора: 0 = ждем Vert 1, 1 = ждем Vert 2, 2 = ввод значения
-        self.state = 0 
-        
-        self.vert_anchor = None # BMVert 1
-        self.vert_target = None # BMVert 2
-        
-        self.anchor_co_world = Vector()
-        self.target_co_world = Vector()
-        self.hover_co_world = Vector()
-        
-        self.distance = 0.0
-        self.input_string = ""
-        self.mouse_2d = Vector((event.mouse_region_x, event.mouse_region_y))
-
-        self.selected_verts_init_co = {v: v.co.copy() for v in self.bm.verts if v.select}
-
-        # Включаем текстовый оверлей
-        screen_overlay.clear()
-        screen_overlay.update_modal_overlay(
-            mouse_2d=self.mouse_2d,
-            header="DISTANCE DRIVE",
-            description="LMB: Select vertex" \
-                        "RMB/ESC: Cancel",
-            lines=["Step 1: Pick Base Point (Anchor)"]
-        )
-
-        # 2. Регистрируем 2D-хэндлер отрисовки
-        self._handle_2d = bpy.types.SpaceView3D.draw_handler_add(
-            screen_overlay.draw, (), 'WINDOW', 'POST_PIXEL'
-        )
-
-        # 3. Активируем отображение
-        screen_overlay.show()
+        if not core.init(self, context, event, self.report):
+            return {"CANCELLED"}
 
         context.window_manager.modal_handler_add(self)
-        context.area.tag_redraw()
+        return {"RUNNING_MODAL"}
 
-        return {'RUNNING_MODAL'}
-    
     def modal(self, context, event):
-        context.area.tag_redraw()
-        self.mouse_2d = Vector((event.mouse_region_x, event.mouse_region_y))
-
-        # Очищаем 3D-реестр перед обновлением кадра
-        draw_3d.clear()
-
-        # --- ОТМЕНА (ESC / RMB) ---
-        if event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
-            self.finish(context)
-            return {'CANCELLED'}
-
-        # --- STATE 0: ВЫБОР ANCHOR (Любая точка сцены / модификаторов) ---
-        if self.state == 0:
-            world_co, bm_v = self.find_snap_target(context, event)
-            if world_co:
-                self.hover_co_world = world_co
-                draw_3d.add_point(self.hover_co_world, color=(0.2, 1.0, 0.4, 1.0), size=8.0)
-
-            screen_overlay.update_modal_overlay(
-                mouse_2d=self.mouse_2d,
-                header="DISTANCE DRIVE",
-                description="Step 1: Pick Base Point (Anchor - Any Object/Modifier)",
-                lines=["LMB: Select vertex", "RMB/ESC: Cancel"]
-            )
-
-            if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-                if world_co:
-                    self.anchor_co_world = world_co.copy()
-                    # vert_anchor теперь может быть None, если точка взята с другого объекта
-                    self.vert_anchor = bm_v 
-                    self.state = 1
-                return {'RUNNING_MODAL'}
-
-        # --- STATE 1: ВЫБОР TARGET (Только вершина редактируемого объекта) ---
-        elif self.state == 1:
-            draw_3d.add_point(self.anchor_co_world, color=(0.0, 1.0, 0.5, 1.0))
-
-            world_co, bm_v = self.find_snap_target(context, event)
-
-            # Отрисовка ховера при наведении на вершину BMesh
-            if bm_v:
-                self.hover_co_world = world_co
-                draw_3d.add_point(self.hover_co_world, color=(1.0, 0.8, 0.0, 1.0))
-                draw_3d.add_line(self.anchor_co_world, self.hover_co_world, color=(1.0, 0.8, 0.0, 0.8), width=2.0)
-
-            screen_overlay.update_modal_overlay(
-                mouse_2d=self.mouse_2d,
-                header="DISTANCE DRIVE",
-                description="Step 2: Pick Target Vertex to Move (Active Object)",
-                lines=["LMB: Select vertex", "RMB/ESC: Cancel"]
-            )
-
-            # ФИКСАЦИЯ TARGET И ПЕРЕХОД В STATE 2 ТОЛЬКО ПО КЛИКУ ЛКМ:
-            if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-                if bm_v and bm_v != self.vert_anchor:
-                    self.vert_target = bm_v
-                    self.target_init_co = bm_v.co.copy()
-                    self.target_co_world = world_co.copy()
-
-                    if self.vert_target not in self.selected_verts_init_co:
-                        self.selected_verts_init_co[self.vert_target] = self.target_init_co
-
-                    self.center_co_world = (self.anchor_co_world + self.target_co_world) * 0.5
-
-                    # 1. Физическая длина в системных метрах Blender
-                    raw_len_meters = (self.target_co_world - self.anchor_co_world).length
-                    self.distance = raw_len_meters
-
-                    # 2. Конвертируем в единицы сцены (см/мм) для стартовой строки
-                    unit_scale = context.scene.unit_settings.scale_length
-                    scene_len = raw_len_meters
-                    
-                    self.input_string = f"{scene_len:.3f}"
-                    self.reset_input_on_key = True  # Первый ввод цифры СРАЗУ заменит эту строку
-                    self.state = 2
-
-                return {'RUNNING_MODAL'}
-
-        # --- STATE 2: ВВОД ЗНАЧЕНИЯ И ТРАНСФОРМАЦИЯ ---
-        elif self.state == 2:
-
-            if event.type == 'C' and event.value == 'PRESS':
-                self.use_center_mode = not self.use_center_mode
-                self.update_geometry(context)
-
-            # 1. КОЛЕСО МЫШИ
-            elif event.type == 'WHEELUPMOUSE' and event.value == 'PRESS':
-                unit_scale = 1
-                # unit_scale = context.scene.unit_settings.scale_length
-                step = 0.005 if event.shift else 0.05
-                
-                # Работаем в единицах сцены
-                current_scene_val = self.distance / unit_scale
-                new_scene_val = current_scene_val + step
-                
-                self.distance = new_scene_val * unit_scale
-                self.input_string = f"{new_scene_val:.3f}"
-                self.reset_input_on_key = True
-                self.update_geometry(context)
-
-            elif event.type == 'WHEELDOWNMOUSE' and event.value == 'PRESS':
-                unit_scale = context.scene.unit_settings.scale_length
-                step = 0.005 if event.shift else 0.05
-                
-                current_scene_val = self.distance / unit_scale
-                new_scene_val = max(0.0, current_scene_val - step)
-                
-                self.distance = new_scene_val * unit_scale
-                self.input_string = f"{new_scene_val:.3f}"
-                self.reset_input_on_key = True
-                self.update_geometry(context)
-
-            # 2. ВВОД С КЛАВИАТУРЫ (ЦИФРЫ И ТОЧКА)
-            elif event.ascii in "0123456789.," and event.value in {'PRESS', 'TEXTINPUT'}:
-                char = "." if event.ascii == "," else event.ascii
-                
-                if self.reset_input_on_key:
-                    self.input_string = char
-                    self.reset_input_on_key = False
-                else:
-                    self.input_string += char
-                    
-                self.parse_and_apply_input(context)
-
-            # 3. BACKSPACE (СТИРАНИЕ)
-            elif event.type == 'BACK_SPACE' and event.value in {'PRESS', 'TEXTINPUT'}:
-                if self.reset_input_on_key:
-                    self.input_string = ""
-                    self.reset_input_on_key = False
-                elif len(self.input_string) > 0:
-                    self.input_string = self.input_string[:-1]
-                
-                self.parse_and_apply_input(context)
-
-            # 4. ПОДТВЕРЖДЕНИЕ / ОТМЕНА
-            elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
-                self.finish(context)
-                return {'FINISHED'}
-
-            elif event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
-                self.finish(context, cancel=True)
-                return {'CANCELLED'}
-
-            # 5. ОТРИСОВКА И ОВЕРЛЕЙ
-            current_target_world = self.matrix_world @ self.vert_target.co
-
-            if self.use_center_mode:
-                simulated_anchor_world = self.center_co_world + (self.center_co_world - current_target_world)
-                draw_3d.add_line(simulated_anchor_world, current_target_world, color=(0.2, 0.6, 1.0, 0.5), width=2.0)
-                draw_3d.add_point(simulated_anchor_world, color=(0.2, 0.6, 1.0, 0.5), size=6.0)
-                draw_3d.add_point(self.center_co_world, color=(1.0, 0.4, 0.0, 1.0), size=10.0)
-                draw_3d.add_point(current_target_world, color=(0.2, 0.6, 1.0, 1.0), size=8.0)
-            else:
-                draw_3d.add_point(self.anchor_co_world, color=(0.0, 1.0, 0.5, 1.0), size=8.0)
-                draw_3d.add_point(current_target_world, color=(0.2, 0.6, 1.0, 1.0), size=8.0)
-                draw_3d.add_line(self.anchor_co_world, current_target_world, color=(0.2, 0.6, 1.0, 1.0), width=3.0)
-
-            mode_label = "[CENTER]" if self.use_center_mode else "[ANCHOR]"
-            display_val = f"{self.input_string} {self.unit}" if self.input_string else f"0.000 {self.unit}"
-
-            screen_overlay.update_modal_overlay(
-                mouse_2d=self.mouse_2d,
-                header=display_val,
-                description="Target Distance",
-                lines=[f"(C) Mode: {mode_label}"]
-            )
-
-        return {'RUNNING_MODAL'}
-    
-    def finish(self, context, cancel=False):
-        draw_3d.clear()
-        screen_overlay.clear()
-        screen_overlay.hide()
-        if hasattr(self, "_handle_2d") and self._handle_2d is not None:
-            bpy.types.SpaceView3D.draw_handler_remove(self._handle_2d, 'WINDOW')
-            self._handle_2d = None
-
-        # Если операция отменена — восстанавливаем исходные координаты всех вершин
-        if cancel:
-            for v, init_co in self.selected_verts_init_co.items():
-                v.co = init_co
-            bmesh.update_edit_mesh(self.obj.data)
-
-        context.area.tag_redraw()
-
-    def parse_and_apply_input(self, context):
-        """Парсит значение в единицах сцены и переводит в метры Blender."""
-        if not self.input_string:
-            self.distance = 0.0
-            self.update_geometry(context)
-            return
-
         try:
-            val_scene = float(self.input_string)
-            # unit_scale = context.scene.unit_settings.scale_length
-            unit_scale = 1
-            
-            # Переводим из введенных сантометров/миллиметров в реальные метры Blender
-            self.distance = max(0.0, val_scene * unit_scale)
-            self.update_geometry(context)
-        except ValueError:
-            pass
+            core.begin_frame(self, context, event)
 
-    def update_geometry(self, context):
-        """Вычисляет позицию target и смещает всю выделенную геометрию."""
-        if not self.vert_target:
-            return
+            # -------------------------------------------------------------
+            # GLOBAL CANCEL
+            # -------------------------------------------------------------
+            if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
+                core.finish(self, context, cancel=True)
+                return {"CANCELLED"}
 
-        # 1. Вычисляем вектор направления (в мировых координатах)
-        if self.use_center_mode:
-            # От центра к целевой вершине
-            direction_world = (self.matrix_world @ self.target_init_co) - self.center_co_world
-        else:
-            # От якоря к целевой вершине
-            direction_world = (self.matrix_world @ self.target_init_co) - self.anchor_co_world
+            # -------------------------------------------------------------
+            # STATE 0: PICK ANCHOR
+            # -------------------------------------------------------------
+            if self.state == 0:
+                core.handle_state0(self, context, event)
 
-        if direction_world.length < 1e-6:
-            return
+            # -------------------------------------------------------------
+            # STATE 1: PICK TARGET
+            # -------------------------------------------------------------
+            elif self.state == 1:
+                core.handle_state1(self, context, event)
 
-        direction_world.normalize()
+            # -------------------------------------------------------------
+            # STATE 2: INPUT DISTANCE
+            # -------------------------------------------------------------
+            elif self.state == 2:
+                # =========================================================
+                # HOTKEYS
+                # =========================================================
 
-        # 2. Новая позиция Target в мировой системе
-        if self.use_center_mode:
-            # В Center Mode расстояние идет от центра (в каждую сторону по self.distance / 2)
-            new_target_world = self.center_co_world + direction_world * (self.distance / 2.0)
-        else:
-            # В Anchor Mode расстояние идет от Anchor напрямую
-            new_target_world = self.anchor_co_world + direction_world * self.distance
+                # C — center / anchor mode
+                if event.type == "C" and event.value == "PRESS":
+                    core.toggle_center_mode(self, context)
 
-        # 3. Переводим новую позицию Target в ЛОКАЛЬНЫЕ координаты меша
-        new_target_local = self.matrix_world_inv @ new_target_world
+                # A — cycle axis: FREE -> X -> Y -> Z -> FREE
+                elif event.type == "A" and event.value == "PRESS":
+                    core.cycle_axis_mode(self, context)
 
-        # 4. Считаем ДЕЛЬТУ смещения от СТАРТОВОГО положения target
-        delta_co = new_target_local - self.target_init_co
+                # F — flip direction, сохраняет введённую длину
+                elif event.type == "F" and event.value == "PRESS":
+                    core.flip_direction(self, context)
 
-        # 5. Применяем дельту ко всем зафиксированным вершинам
-        for v, init_co in self.selected_verts_init_co.items():
-            v.co = init_co + delta_co
+                # Колесо — шаг
+                elif event.type == "WHEELUPMOUSE" and event.value == "PRESS":
+                    core.nudge_distance(self, context, +1.0, event.shift)
 
-        # 6. Обновляем BMesh
-        bmesh.update_edit_mesh(self.obj.data)
+                elif event.type == "WHEELDOWNMOUSE" and event.value == "PRESS":
+                    core.nudge_distance(self, context, -1.0, event.shift)
 
-    def find_snap_target(self, context, event):
-        """Поиск ближайшей вершины с учетом видимости и режима X-Ray."""
-        region = context.region
-        rv3d = context.region_data
-        coord = (event.mouse_region_x, event.mouse_region_y)
-        depsgraph = context.evaluated_depsgraph_get()
-        scene = context.scene
+                # Подтверждение
+                elif event.type in {"RET", "NUMPAD_ENTER", "LEFTMOUSE"} and event.value == "PRESS":
+                    core.finish(self, context, cancel=False)
+                    return {"FINISHED"}
 
-        # Проверка состояния X-Ray во вьюпорте
-        space = context.space_data
-        is_xray_active = False
-        if space and space.type == 'VIEW_3D':
-            shading = space.shading
-            # X-Ray активен, если включен Wireframe ИЛИ явно взведен флаг show_xray
-            is_xray_active = (shading.type == 'WIRE') or shading.show_xray
+                # ---------------------------------------------------------
+                # TEXT INPUT
+                # ---------------------------------------------------------
+                else:
+                    char = core.get_input_char(event)
 
-        view_origin = rv3d.view_matrix.inverted().translation
+                    if char is not None:
+                        if self.reset_input_on_key:
+                            self.input_string = char
+                            self.reset_input_on_key = False
+                        else:
+                            self.input_string += char
 
-        best_dist_2d = 25.0
-        best_world_co = None
-        matched_bm_vert = None
+                        core.parse_input_string(self, context)
 
-        def is_point_visible(target_co):
-            """Проверяет, не заслонена ли точка другой геометрией (игнорируется в X-Ray)."""
-            if is_xray_active:
-                return True
+                    # BACKSPACE
+                    elif event.type == "BACK_SPACE" and event.value in {"PRESS", "REPEAT"}:
+                        changed = False
 
-            ray_dir = (target_co - view_origin)
-            dist_to_target = ray_dir.length
-            if dist_to_target < 1e-6:
-                return True
+                        if self.reset_input_on_key:
+                            self.input_string = ""
+                            self.reset_input_on_key = False
+                            changed = True
+                        elif len(self.input_string) > 0:
+                            self.input_string = self.input_string[:-1]
+                            changed = True
 
-            ray_dir.normalize()
+                        if changed:
+                            core.parse_input_string(self, context)
 
-            # Трассировка луча от камеры к вершине (недолетая 0.001 для защиты от самопересечения)
-            hit, loc, norm, face_idx, obj, matrix = scene.ray_cast(
-                depsgraph, view_origin, ray_dir, distance=dist_to_target - 0.001
-            )
-            return not hit
+                    # DELETE
+                    elif event.type == "DEL" and event.value in {"PRESS", "REPEAT"}:
+                        self.input_string = ""
+                        self.reset_input_on_key = False
+                        core.parse_input_string(self, context)
 
-        # 1. Проверяем BMesh активного объекта
-        for v in self.bm.verts:
-            v_world = self.matrix_world @ v.co
-            screen_pos = view3d_utils.location_3d_to_region_2d(region, rv3d, v_world)
-            if screen_pos:
-                dist = (screen_pos - Vector(coord)).length
-                if dist < best_dist_2d:
-                    if is_point_visible(v_world):
-                        best_dist_2d = dist
-                        best_world_co = v_world
-                        matched_bm_vert = v
+            # -------------------------------------------------------------
+            # PREVIEW / HUD
+            # -------------------------------------------------------------
+            core.draw_preview(self, context)
+            core.update_hud(self, context)
 
-        # 2. Проверяем геометрию остальных объектов
-        if not matched_bm_vert:
-            for obj in context.visible_objects:
-                if obj.type != 'MESH':
-                    continue
+            return {"RUNNING_MODAL"}
 
-                eval_obj = obj.evaluated_get(depsgraph)
-                mesh = eval_obj.to_mesh()
-                matrix_world = eval_obj.matrix_world
+        except Exception as exc:
+            self.report({"ERROR"}, f"Set Length error: {exc}")
 
-                for v in mesh.vertices:
-                    v_world = matrix_world @ v.co
-                    screen_pos = view3d_utils.location_3d_to_region_2d(region, rv3d, v_world)
-                    if screen_pos:
-                        dist = (screen_pos - Vector(coord)).length
-                        if dist < best_dist_2d:
-                            if is_point_visible(v_world):
-                                best_dist_2d = dist
-                                best_world_co = v_world
+            try:
+                core.finish(self, context, cancel=True)
+            except Exception:
+                pass
 
-                eval_obj.to_mesh_clear()
-
-        return best_world_co, matched_bm_vert
+            return {"CANCELLED"}
+    
 
 
 classes_to_register = [
@@ -996,6 +800,7 @@ classes_to_register = [
     VIEW3D_OT_SymmetryByAxisModal,
     MESH_OT_SetLength,
     # MESH_OT_Symmetrize,
+    # VIEW3D_OT_3DOverlay,
     
     VIEW3D_OT_debug_line_dir,
     VIEW3D_OT_debug_screen_to_world_dir,

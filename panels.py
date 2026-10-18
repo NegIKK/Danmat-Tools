@@ -137,6 +137,7 @@ class VIEW3D_PT_Testing(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         col = layout.column(align=True)
         row = col.row(align=True)
         col.operator(dev_operators.OBJECT_OT_testOperator1.bl_idname)
+        # col.operator(dev_operators.VIEW3D_OT_3DOverlay.bl_idname)
         # col.operator(operators.VIEW3D_OT_overlay_example.bl_idname)
         # col.separator()
         # col.operator(operators.VIEW3D_OT_overlay_select_object.bl_idname)
