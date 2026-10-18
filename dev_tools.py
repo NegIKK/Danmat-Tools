@@ -323,3 +323,62 @@ def get_orientation_matrix(context, orientation_name):
 
         # Fallback
         return mathutils.Matrix.Identity(4)
+
+
+def build_geometry_cache(self, context, items):
+    """
+    Строит кэш evaluated geometry для всех utility объектов.
+    Вызывается один раз в invoke().
+    """
+    self.geom_cache = {}
+    
+    # Получаем depsgraph один раз
+    dg = context.evaluated_depsgraph_get()
+    
+    for obj in items:
+        if obj.type != 'MESH':
+            continue
+            
+        try:
+            eval_obj = obj.evaluated_get(dg)
+            me = eval_obj.to_mesh()
+            
+            if me is None:
+                continue
+                
+            mw = eval_obj.matrix_world
+            
+            # 1. Вершины в мировых координатах
+            verts_world = [mw @ v.co for v in me.vertices]
+            
+            # 2. Индексы ребер (пары индексов вершин)
+            # Используем set для уникальности, хотя в Mesh они уже уникальны по ID, 
+            # но порядок вершин в edge.vertices может быть разным.
+            edges_pairs = []
+            seen_edges = set()
+            for edge in me.edges:
+                v1, v2 = edge.vertices
+                # Нормализуем пару, чтобы 0-1 и 1-0 считались одним ребром
+                key = (min(v1, v2), max(v1, v2))
+                if key not in seen_edges:
+                    seen_edges.add(key)
+                    edges_pairs.append(key)
+                    
+            # 3. Индексы полигонов (списки индексов вершин)
+            polys_indices = []
+            for poly in me.polygons:
+                polys_indices.append(list(poly.vertices))
+            
+            # Сохраняем в кэш
+            self.geom_cache[obj.name] = {
+                'vertices': verts_world,
+                'edges': edges_pairs,
+                'polygons': polys_indices,
+            }
+            
+            # ВАЖНО: Освобождаем память immediately
+            eval_obj.to_mesh_clear()
+            
+        except Exception as e:
+            print(f"[OverlayUtils] Cache build error for {obj.name}: {e}")
+            self.geom_cache[obj.name] = {'vertices': [], 'edges': [], 'polygons': []}

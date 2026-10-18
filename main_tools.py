@@ -271,17 +271,28 @@ def select_object_by_index(self, context, index, initial_active=None, set_active
     if not self._items:
         return
     
+    # for i, obj in enumerate(self._items):
+    #     if isinstance(obj, bpy.types.Object):
+    #         if i == index:
+    #             # obj.hide_set(False)
+    #             # if set_active:
+    #                 # context.view_layer.objects.active = obj
+    #                 # obj.select_set(True)
+    #             if initial_active:
+    #                 context.view_layer.objects.active = initial_active
+    #         else:
+    #             obj.hide_set(True)
+
+def hide_other_objects(self, index, hide_all=False):
     for i, obj in enumerate(self._items):
-        if isinstance(obj, bpy.types.Object):
-            if i == index:
-                obj.hide_set(False)
-                if set_active:
-                    # context.view_layer.objects.active = obj
-                    obj.select_set(True)
-                if initial_active:
-                    context.view_layer.objects.active = initial_active
-            else:
-                obj.hide_set(True)
+        if (not hide_all):
+            if isinstance(obj, bpy.types.Object):
+                if i == index:
+                    obj.hide_set(False)
+                else:
+                    obj.hide_set(True)
+        else:
+            obj.hide_set(True)
     
 
 

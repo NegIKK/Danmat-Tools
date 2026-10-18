@@ -575,3 +575,4 @@ def _approximate_object_point(context, obj, event):
         return Vector(context.region_data.view_location)
     except Exception:
         return Vector((0.0, 0.0, 0.0))
+    

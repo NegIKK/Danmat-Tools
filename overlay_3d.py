@@ -1071,6 +1071,267 @@ def draw_face(
 
 
 # =====================================================================
+# EVALUATED GEOMETRY HELPERS
+# =====================================================================
+
+def draw_eval_vertex(
+    obj,
+    indices=None,
+    color=None,
+    size=None,
+    fade: float = 0.35,
+    appear: float = 0.0,
+    peak_alpha: float = 1.0,
+    rest_alpha: float = 0.0,
+    delay: float = 0.0,
+    overlay: bool = True,
+    depsgraph=None,
+) -> None:
+    """
+    Подсветка вершин ПОСЛЕ модификаторов / Geometry Nodes.
+
+    ВАЖНО:
+    indices должны быть индексами evaluated mesh.
+    Если indices=None — берутся все вершины evaluated mesh.
+
+    Для статичной подсветки используй:
+        fade=0.0, rest_alpha=1.0
+    """
+    if obj is None:
+        return
+
+    if depsgraph is None:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+
+    try:
+        eval_obj = obj.evaluated_get(depsgraph)
+    except Exception:
+        return
+
+    if eval_obj is None:
+        return
+
+    me = None
+
+    try:
+        me = eval_obj.to_mesh()
+        if me is None:
+            return
+
+        mw = eval_obj.matrix_world
+
+        if indices is None:
+            idx_iter = range(len(me.vertices))
+        else:
+            idx_iter = _as_indices(indices)
+
+        for idx in idx_iter:
+            if 0 <= idx < len(me.vertices):
+                draw_point(
+                    pos=mw @ me.vertices[idx].co,
+                    color=color,
+                    size=size,
+                    fade=fade,
+                    appear=appear,
+                    peak_alpha=peak_alpha,
+                    rest_alpha=rest_alpha,
+                    delay=delay,
+                    overlay=overlay,
+                )
+
+    finally:
+        if me is not None:
+            try:
+                eval_obj.to_mesh_clear()
+            except Exception:
+                pass
+
+
+def draw_eval_edge(
+    obj,
+    indices=None,
+    color=None,
+    width=None,
+    fade: float = 0.35,
+    appear: float = 0.0,
+    peak_alpha: float = 1.0,
+    rest_alpha: float = 0.0,
+    delay: float = 0.0,
+    overlay: bool = True,
+    depsgraph=None,
+) -> None:
+    """
+    Подсветка рёбер ПОСЛЕ модификаторов / Geometry Nodes.
+
+    ВАЖНО:
+    indices должны быть индексами evaluated mesh.
+    Если indices=None — берутся все рёбра evaluated mesh.
+    """
+    if obj is None:
+        return
+
+    if depsgraph is None:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+
+    try:
+        eval_obj = obj.evaluated_get(depsgraph)
+    except Exception:
+        return
+
+    if eval_obj is None:
+        return
+
+    me = None
+
+    try:
+        me = eval_obj.to_mesh()
+        if me is None:
+            return
+
+        mw = eval_obj.matrix_world
+
+        if indices is None:
+            idx_iter = range(len(me.edges))
+        else:
+            idx_iter = _as_indices(indices)
+
+        for idx in idx_iter:
+            if 0 <= idx < len(me.edges):
+                edge = me.edges[idx]
+                v1_idx, v2_idx = edge.vertices
+
+                if v1_idx < 0 or v1_idx >= len(me.vertices):
+                    continue
+                if v2_idx < 0 or v2_idx >= len(me.vertices):
+                    continue
+
+                draw_line(
+                    start=mw @ me.vertices[v1_idx].co,
+                    end=mw @ me.vertices[v2_idx].co,
+                    color=color,
+                    width=width,
+                    fade=fade,
+                    appear=appear,
+                    peak_alpha=peak_alpha,
+                    rest_alpha=rest_alpha,
+                    delay=delay,
+                    overlay=overlay,
+                )
+
+    finally:
+        if me is not None:
+            try:
+                eval_obj.to_mesh_clear()
+            except Exception:
+                pass
+
+
+def draw_eval_face(
+    obj,
+    indices=None,
+    color=None,
+    width=None,
+    filled: bool = True,
+    outline: bool = True,
+    outline_color=None,
+    fade: float = 0.35,
+    appear: float = 0.0,
+    peak_alpha: float = 1.0,
+    rest_alpha: float = 0.0,
+    delay: float = 0.0,
+    overlay: bool = True,
+    depsgraph=None,
+) -> None:
+    """
+    Подсветка граней ПОСЛЕ модификаторов / Geometry Nodes.
+
+    ВАЖНО:
+    indices должны быть индексами evaluated mesh.
+    Если indices=None — берутся все полигоны evaluated mesh.
+
+    Для статичной подсветки выбранного utility объекта обычно нужно:
+        fade=0.0,
+        rest_alpha=1.0
+    """
+    if obj is None:
+        return
+
+    if depsgraph is None:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+
+    try:
+        eval_obj = obj.evaluated_get(depsgraph)
+    except Exception:
+        return
+
+    if eval_obj is None:
+        return
+
+    me = None
+
+    try:
+        me = eval_obj.to_mesh()
+        if me is None:
+            return
+
+        mw = eval_obj.matrix_world
+
+        if color is None:
+            final_color = (1.0, 1.0, 1.0, 0.35)
+        else:
+            final_color = _to_rgba(color)
+
+        if outline_color is None:
+            final_outline_color = (
+                final_color[0],
+                final_color[1],
+                final_color[2],
+                1.0,
+            )
+        else:
+            final_outline_color = _to_rgba(outline_color)
+
+        if indices is None:
+            idx_iter = range(len(me.polygons))
+        else:
+            idx_iter = _as_indices(indices)
+
+        for idx in idx_iter:
+            if 0 <= idx < len(me.polygons):
+                poly = me.polygons[idx]
+                points = []
+
+                for vi in poly.vertices:
+                    if 0 <= vi < len(me.vertices):
+                        points.append(mw @ me.vertices[vi].co)
+
+                if len(points) < 3:
+                    continue
+
+                draw_polygon(
+                    points=points,
+                    color=final_color,
+                    width=width,
+                    filled=filled,
+                    outline=outline,
+                    outline_color=final_outline_color,
+                    fade=fade,
+                    appear=appear,
+                    peak_alpha=peak_alpha,
+                    rest_alpha=rest_alpha,
+                    delay=delay,
+                    overlay=overlay,
+                )
+
+    finally:
+        if me is not None:
+            try:
+                eval_obj.to_mesh_clear()
+            except Exception:
+                pass
+
+
+# =====================================================================
 # CONTROL
 # =====================================================================
 

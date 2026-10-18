@@ -10,6 +10,7 @@ from . import main_tools
 from .modules import bridge
 from . import dev_tools
 from . import screen_overlay
+from . import overlay_3d
 from . import draw_3d
 
 from bpy.props import EnumProperty, BoolProperty
@@ -173,6 +174,7 @@ class VIEW3D_OT_OverlayManageUtils(bpy.types.Operator):
         obj = context.active_object
         exclude_mirror = getattr(bpy.context.scene.danmat_tools_props, 'exclude_mirror')
         self._initial_active = context.active_object
+        self._active_obj = None
 
         if context.mode != 'OBJECT':
             self.report({'WARNING'}, "Object mode only")
@@ -213,33 +215,58 @@ class VIEW3D_OT_OverlayManageUtils(bpy.types.Operator):
             screen_overlay.set_position(event.mouse_region_x, event.mouse_region_y)
             context.area.tag_redraw()
 
-        elif event.type == 'WHEELUPMOUSE':
-            self._active_index = main_tools.cycle_index(self._active_index, -1, len(self._items))
+        if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.value == 'PRESS':
+            direction = -1 if event.type == 'WHEELUPMOUSE' else 1
+            
+            self._active_index = main_tools.cycle_index(self._active_index, direction, len(self._items))
             main_tools.select_object_by_index(self, context, self._active_index, self._initial_active, select_utility)
 
-            active_obj = self._items[self._active_index]
-            main_tools.set_active_modifier_for_object(self._initial_active, active_obj)
+            self.active_obj = self._items[self._active_index]
+            main_tools.set_active_modifier_for_object(self._initial_active, self.active_obj)
 
-            screen_overlay.set_active(self._active_index)
-            context.area.tag_redraw()
-            return {'RUNNING_MODAL'}
+            # --- ПОЛУЧЕНИЕ ФЕЙСОВ ПОСЛЕ МОДИФИКАТОРОВ ---
+            overlay_3d.clear()
 
-        elif event.type == 'WHEELDOWNMOUSE':
-            self._active_index = main_tools.cycle_index(self._active_index, 1, len(self._items))
-            main_tools.select_object_by_index(self, context, self._active_index, self._initial_active, select_utility)
+            
+            # Список индексов всех полигонов итогового меша
+            face_indices = [p.index for p in self.active_obj.to_mesh().polygons]
+            edge_indices = [p.index for p in self.active_obj.to_mesh().edges]
+            vertex_indices = [p.index for p in self.active_obj.to_mesh().vertices]
+            
+            overlay_3d.register() # На всякий случай, если не вызван ранее
 
-            active_obj = self._items[self._active_index]
-            main_tools.set_active_modifier_for_object(self._initial_active, active_obj)
+            # overlay_3d.draw_eval_vertex(
+            #     active_obj,
+            #     vertex_indices,
+            #     fade=0.5,
+            #     rest_alpha=0.1,
+            #     size=0.2
+            # )
 
+            overlay_3d.draw_edge(
+                self.active_obj,
+                edge_indices,
+                fade=0.25,
+                rest_alpha=0.2,
+                width=1
+            )
+
+            # -------------------------------------------------- 
+
+            
             screen_overlay.set_active(self._active_index)
             context.area.tag_redraw()
             return {'RUNNING_MODAL'}
 
         elif event.type == 'LEFTMOUSE':
+            main_tools.hide_other_objects(self, self._active_index)
+            self.active_obj.hide_set(False)
+            self.active_obj.select_set(True)
             self.finish(context, cancelled=False)
             return {'FINISHED'}
 
         elif event.type in {'ESC', 'RIGHTMOUSE'}:
+            main_tools.hide_other_objects(self, self._active_index, hide_all=True)
             self.finish(context, cancelled=True)
             return {'CANCELLED'}
 
@@ -251,6 +278,7 @@ class VIEW3D_OT_OverlayManageUtils(bpy.types.Operator):
             bpy.types.SpaceView3D.draw_handler_remove(self._draw_handler, 'WINDOW')
             self._draw_handler = None
 
+        overlay_3d.clear()
         screen_overlay.clear()
 
         if cancelled and self._initial_active:
