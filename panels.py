@@ -11,7 +11,7 @@ def get_panel_category():
 class VIEW3D_PT_DanmatPanel:
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'TEMP'
+    bl_category = 'Tool'
     # bl_options = {"DEFAULT_CLOSED"}
     
     @classmethod
@@ -147,6 +147,7 @@ class VIEW3D_PT_Testing(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         # col.operator(dev_operators.VIEW3D_OT_Focus.bl_idname)
         # col.operator(dev_operators.MESH_OT_align_geo.bl_idname)
         col.operator(dev_operators.VIEW3D_OT_SymmetryByAxisModal.bl_idname)
+        col.operator(dev_operators.MESH_OT_SetLength.bl_idname)
         col.operator(dev_operators.MESH_OT_SetLength.bl_idname)
         # col.operator(dev_operators.MESH_OT_Symmetrize.bl_idname)
 

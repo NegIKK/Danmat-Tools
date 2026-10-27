@@ -1,34 +1,45 @@
 import bpy
 
-class DanmatPreferences(bpy.types.AddonPreferences):
-    bl_idname = __package__ # Нужно чтоб в принципе это работало
+
+def make_update_func(panel_class_name: str):
+    def update_category(self, context):
+
+        from . import panels
+
+        panel_class = getattr(panels, panel_class_name, None)
+        if not panel_class:
+            return
+
+        try:
+            bpy.utils.unregister_class(panel_class)
+        except RuntimeError:
+            pass
+
+        new_cat = self.panel_category.strip() or "Tool"
+        panel_class.bl_category = new_cat
+        bpy.utils.register_class(panel_class)
+
+    return update_category
+
+
+class DNMTools_prefs(bpy.types.AddonPreferences):
+    bl_idname = __package__
 
     panel_category: bpy.props.StringProperty(
         name="N-Panel Category",
         description="Category name",
-        default="Tool"
-    ) # type: ignore
+        default="Tool",
+        # Передаем результат вызова фабрики — это обычная функция
+        update=make_update_func("VIEW3D_PT_DanmatPanel"),
+    )
 
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "panel_category")
 
 
-def apply_panel_category():
-    """Применяет сохранённую категорию панели из настроек"""
-    import bpy
-    try:
-        prefs = bpy.context.preferences.addons[__package__].preferences
-        # Импортируем панель здесь, чтобы избежать циклических импортов
-        from . import panels
-        if hasattr(panels, 'VIEW3D_PT_DanmatPanel'):
-            panels.VIEW3D_PT_DanmatPanel.bl_category = prefs.panel_category
-    except Exception:
-        pass
-
-
 classes_to_register = [
-    DanmatPreferences
+    DNMTools_prefs
 ]
 
 def register():
