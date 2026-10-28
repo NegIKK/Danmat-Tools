@@ -228,28 +228,23 @@ class VIEW3D_OT_OverlayManageUtils(bpy.types.Operator):
             overlay_3d.clear()
 
             
-            # Список индексов всех полигонов итогового меша
-            face_indices = [p.index for p in self.active_obj.to_mesh().polygons]
-            edge_indices = [p.index for p in self.active_obj.to_mesh().edges]
-            vertex_indices = [p.index for p in self.active_obj.to_mesh().vertices]
-            
-            overlay_3d.register() # На всякий случай, если не вызван ранее
-
-            # overlay_3d.draw_eval_vertex(
-            #     active_obj,
-            #     vertex_indices,
-            #     fade=0.5,
-            #     rest_alpha=0.1,
-            #     size=0.2
-            # )
-
-            overlay_3d.draw_edge(
-                self.active_obj,
-                edge_indices,
-                fade=0.25,
-                rest_alpha=0.2,
-                width=1
-            )
+                # Отрисовываем рёбра только если это меш и у него есть рёбра.
+            if self.active_obj is not None and self.active_obj.type == 'MESH':
+                eval_obj = self.active_obj.evaluated_get(context.evaluated_depsgraph_get())
+                me = eval_obj.to_mesh()
+                try:
+                    if me is not None and len(me.edges) > 0:
+                        edge_indices = [e.index for e in me.edges]
+                        overlay_3d.register()
+                        overlay_3d.draw_edge(
+                            self.active_obj,
+                            edge_indices,
+                            fade=0.25,
+                            rest_alpha=0.2,
+                            width=1,
+                        )
+                finally:
+                    eval_obj.to_mesh_clear()
 
             # -------------------------------------------------- 
 

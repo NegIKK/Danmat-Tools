@@ -663,6 +663,15 @@ class MESH_OT_SetLength(bpy.types.Operator):
     # Строгий vertex snap в пикселях.
     SNAP_PIXELS = 24.0
 
+    # Ignore objects displayed as Wire/Bounds: they neither provide snap
+    # targets nor block the points behind them. The value is seeded from the
+    # persistent scene setting on invoke, so it can also be set per call.
+    ignore_wire_bbox: BoolProperty(
+        name="Ignore Wire/Bounds Objects",
+        description="Ignore objects displayed as Wire or Bounds when snapping",
+        default=False,
+    )
+
     @classmethod
     def poll(cls, context):
         obj = context.active_object
@@ -673,6 +682,13 @@ class MESH_OT_SetLength(bpy.types.Operator):
         )
 
     def invoke(self, context, event):
+        # Snapshot the persistent scene setting for this modal session.
+        props = getattr(context.scene, "danmat_tools_props", None)
+        if props is not None and not self.ignore_wire_bbox:
+            self.ignore_wire_bbox = bool(
+                getattr(props, "set_length_ignore_wire_bbox", False)
+            )
+
         if not core.init(self, context, event, self.report):
             return {"CANCELLED"}
 

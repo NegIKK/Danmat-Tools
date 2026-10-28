@@ -149,6 +149,8 @@ class VIEW3D_PT_Testing(VIEW3D_PT_DanmatPanel, bpy.types.Panel):
         col.operator(dev_operators.VIEW3D_OT_SymmetryByAxisModal.bl_idname)
         col.operator(dev_operators.MESH_OT_SetLength.bl_idname)
         col.operator(dev_operators.MESH_OT_SetLength.bl_idname)
+        col.separator()
+        col.prop(scene.danmat_tools_props, "set_length_ignore_wire_bbox")
         # col.operator(dev_operators.MESH_OT_Symmetrize.bl_idname)
 
         # col.operator(operators.OBJECT_OT_GetModifiersObjects.bl_idname)

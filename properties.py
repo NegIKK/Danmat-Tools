@@ -58,6 +58,15 @@ class DanmatToolsProps(bpy.types.PropertyGroup):
 
     focus_history: props.CollectionProperty(type=FocusEpoch) # type: ignore
 
+    set_length_ignore_wire_bbox: props.BoolProperty(
+        name="Ignore Wire/Bounds Objects",
+        description=(
+            "Set Length: do not snap to objects displayed as Wire or Bounds "
+            "and do not let them block snapped points"
+        ),
+        default=False
+    ) # type: ignore
+
 classes = (
     FocusObjectEntry,
     FocusEpoch,

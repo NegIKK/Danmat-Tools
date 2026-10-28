@@ -23,7 +23,7 @@ def register():
 
     draw_3d.register()
 
-    preferences.apply_panel_category()
+    # preferences.apply_panel_category()
 
     operators.register()
     dev_operators.register()
@@ -33,7 +33,7 @@ def unregister(): # Выгружается все в обратном поряд
     panels.unregister()
     operators.unregister()
     dev_operators.unregister()
-    draw_3d.register()
+    draw_3d.unregister()
     preferences.unregister()
     properties.unregister()
 

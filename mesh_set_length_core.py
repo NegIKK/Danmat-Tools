@@ -2,12 +2,8 @@ import bpy
 import bmesh
 from mathutils import Vector
 
-try:
-    from . import viewport_helpers as vh
-    from . import screen_overlay
-except ImportError:
-    import viewport_helpers as vh
-    import screen_overlay
+from . import viewport_helpers as vh
+from . import screen_overlay
 
 
 UNIT_CONFIG = {
@@ -613,7 +609,12 @@ def init(op, context, event, report):
 
     op.selected_snapshot = make_selection_snapshot(bm)
     op.move_indices = []
-    op.snapper = vh.ViewportSnapper(context, obj, bm)
+    op.snapper = vh.ViewportSnapper(
+        context,
+        obj,
+        bm,
+        ignore_wire_bbox=bool(getattr(op, "ignore_wire_bbox", False)),
+    )
     op._handle_2d = None
 
     vh.register()
@@ -846,6 +847,8 @@ def _set_screen_overlay(op, header, description, lines):
 
 
 def update_hud(op, context):
+    ignore_wire = "ON" if getattr(op, "ignore_wire_bbox", False) else "OFF"
+
     if op.state == 0:
         header = "DISTANCE DRIVE"
         description = "Step 1: Pick Anchor Vertex"
@@ -854,6 +857,7 @@ def update_hud(op, context):
             "ESC/RMB: cancel",
             "Yellow: active mesh vertex",
             "Green/Cyan: other/virtual vertex",
+            f"Ignore Wire/BBox: {ignore_wire}",
         ]
 
         if not op.hover_valid:
@@ -866,6 +870,7 @@ def update_hud(op, context):
             "LMB: select target",
             "ESC/RMB: cancel",
             "Target must be active mesh vertex",
+            f"Ignore Wire/BBox: {ignore_wire}",
         ]
 
         if not op.hover_valid:
